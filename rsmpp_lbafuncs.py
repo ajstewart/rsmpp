@@ -1,4 +1,4 @@
-#Version 2.00a
+#Version 2.00
 
 import os, subprocess,time, glob, logging, sys
 import pyrap.tables as pt
@@ -12,7 +12,7 @@ tools={"editparmdb":os.path.join(rootpath, "tools", "edit_parmdb", "edit_parmdb.
 "solplot":os.path.join(rootpath, "tools", "plotting", "solplot.py"),
 }
 
-log=logging.getLogger("rsmlba")
+log=logging.getLogger("rsm")
 
 #----------------------------------------------------------------------------------------------------------------------------------------------
 #																Function Definitions

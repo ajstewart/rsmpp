@@ -13,7 +13,7 @@
 
 #All the same as HBA version apart from:
 
-#---Version 2.00a---
+#---Version 2.00---
 
 
 import subprocess, multiprocessing, os, glob, optparse, sys, datetime, string, getpass, time, logging, ConfigParser
@@ -178,7 +178,7 @@ if phaseO:
 	phase_pattern=options.phase_pattern
 
 #Setup logging
-log=logging.getLogger("rsmlba")
+log=logging.getLogger("rsm")
 log.setLevel(logging.DEBUG)
 logformat=logging.Formatter('[%(asctime)s] - %(levelname)s - %(message)s', datefmt='%d/%m/%Y %H:%M:%S')
 term=logging.StreamHandler()
@@ -771,12 +771,12 @@ else:
 			for j in to_remove:
 				aw_sets.remove(j)
 			log.info("Maximum baseline to image: {0} {1}".format(maxb, maxbunit))
-			if not no_mask:
+			if mask:
 				create_mask_multi=partial(rsmshared.create_mask, mask_size=mask_size, toimage=toimage)
 				if __name__ == '__main__':
 					worker_pool.map(create_mask_multi,beams)
 			AW_Steps_multi=partial(rsmshared.AW_Steps, aw_sets=aw_sets, maxb=maxb, aw_env=awimager_environ, niter=niters, automaticthresh=automaticthresh,
-			bandsthreshs_dict=bandsthreshs_dict, initialiter=initialiters, uvORm=maxbunit, nomask=no_mask, userthresh=userthresh, mos=mosaic)
+			bandsthreshs_dict=bandsthreshs_dict, initialiter=initialiters, uvORm=maxbunit, usemask=mask, userthresh=userthresh, mos=mosaic)
 			if __name__ == '__main__':
 				pool = Pool(processes=2)
 				pool.map(AW_Steps_multi,toimage)
@@ -794,7 +794,7 @@ else:
 			if __name__=='__main__':
 				worker_pool.map(average_band_images_multi, target_obs)
 			if mosaic:
-				create_mosaic_multi=partial(rsmshared.create_mosaic, band_nums=rsm_band_numbers, chosen_environ=chosen_environ, pad=userpad)
+				create_mosaic_multi=partial(rsmshared.create_mosaic, band_nums=rsm_band_numbers, chosen_environ=chosen_environ, pad=userpad, avgpbr=avpbrad)
 				pool=Pool(processes=len(rsm_band_numbers))
 				pool.map(create_mosaic_multi, target_obs)
 	
@@ -841,7 +841,7 @@ else:
 		end=datetime.datetime.utcnow()
 		date_time_end=end.strftime("%d-%b-%Y %H:%M:%S")
 		tdelta=end-now
-		subprocess.call(["cp", "../rsmpp_lba.log", "rsmpp_lba_CRASH.log".format(newdirname)])
+		subprocess.call(["cp", os.path.join(root_dir, "rsmpp_lba.log"), "rsmpp_lba_CRASH.log".format(newdirname)])
 		if mail==True:
 			em.send_email(emacc,user_address,"rsmpp Job Error","{0},\n\nYour job {1} crashed with the following error:\n\n{2}\n\nTime of crash: {3}".format(user,newdirname,e, end))
 			em.send_email(emacc,"adam.stewart@astro.ox.ac.uk","rsmpp Job Error","{0}'s job '{1}' just crashed with the following error:\n\n{2}\n\nTime of crash: {3}".format(user,newdirname,e,end))

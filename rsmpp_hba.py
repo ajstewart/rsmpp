@@ -197,7 +197,7 @@ log.addHandler(term)
 if phaseO:
 	textlog=logging.FileHandler('rsmpp_phaseonly.log', mode='w')
 else:
-	textlog=logging.FileHandler('rsmpp.log', mode='w')
+	textlog=logging.FileHandler('rsmpp_hba.log', mode='w')
 textlog.setLevel(logging.DEBUG)
 textlog.setFormatter(logformat)
 log.addHandler(textlog)
@@ -836,10 +836,7 @@ Script now exiting...".format(i, data_dir))
 				os.chdir(i)
 				os.mkdir("images")
 				subprocess.call("mv *.fits images", shell=True)
-				if image_meth=="CASA" or image_meth=="BOTH":
-					subprocess.call("mv *.image *.flux *.model *.residual *.psf images", shell=True)
-				if image_meth=="AW" or image_meth=="BOTH":
-					subprocess.call("mv *.model *.residual *.psf *.restored *0.avgpb *.img0.spheroid_cut* *.corr images", shell=True)
+				subprocess.call("mv *.model *.residual *.psf *.restored *0.avgpb *.img0.spheroid_cut* *.corr images", shell=True)
 				os.chdir("..")
 			log.info("Creating averaged images...")
 			average_band_images_multi=partial(rsmshared.average_band_images, beams=beams)
@@ -903,7 +900,7 @@ Script now exiting...".format(i, data_dir))
 		end=datetime.datetime.utcnow()
 		date_time_end=end.strftime("%d-%b-%Y %H:%M:%S")
 		tdelta=end-now
-		subprocess.call(["cp", "../rsmpp.log", "rsmpp_CRASH.log".format(newdirname)])
+		subprocess.call(["cp", os.path.join(root_dir, "rsmpp_hba.log"), "rsmpp_hba_CRASH.log".format(newdirname)])
 		if mail==True:
 			em.send_email(emacc,user_address,"rsmpp Job Error","{0},\n\nYour job {1} crashed with the following error:\n\n{2}\n\nTime of crash: {3}".format(user,newdirname,e, end))
 			em.send_email(emacc,"adam.stewart@astro.ox.ac.uk","rsmpp Job Error","{0}'s job '{1}' just crashed with the following error:\n\n{2}\n\nTime of crash: {3}".format(user,newdirname,e,end))
