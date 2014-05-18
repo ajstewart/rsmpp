@@ -11,12 +11,12 @@
 
 #Written by Adam Stewart, Last Update May 2014
 
-#---Version 2.00a---
+#---Version 2.00---
 #
 
 #Older notes moved to google doc
 
-import subprocess, multiprocessing, os, glob, optparse, sys, datetime, string, getpass, time, logging, ConfigParser
+import subprocess, multiprocessing, os, glob, optparse, sys, datetime, string, getpass, time, logging, ConfigParser, base64
 from functools import partial
 from multiprocessing import Pool
 import pyrap.tables as pt
@@ -286,6 +286,7 @@ else:
 
 #Imaging Check inc parsets are present
 if imaging_set:
+	bandsthreshs_dict={}
 	if os.path.isfile("parsets/aw.parset") == False:
 		log.critical("Cannot find imaging parset file 'aw.parset' in the 'parsets' directory, please check it is present\n\
 Script now exiting...")
@@ -297,7 +298,6 @@ Script now exiting...")
 			log.critical("Number of thresholds given is less than the number of bands")
 			sys.exit()
 		else:
-			bandsthreshs_dict={}
 			for i in range(0, len(tempbandsthresh)):
 				bandsthreshs_dict["{0:02d}".format(i)]=float(tempbandsthresh[i])
 	#check baseline selections
