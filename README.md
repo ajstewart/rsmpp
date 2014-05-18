@@ -25,6 +25,7 @@ Required modules (should all be standard except pyrap):
 * itertools
 * numpy
 * pyrap
+* base64
 
 LOFAR Imaging Tools also required. (LofIm tools)
 
