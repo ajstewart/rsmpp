@@ -1,0 +1,18 @@
+######################################################
+#
+# ddep.parset
+#
+
+Strategy.InputColumn = PEELED_DATA
+Strategy.ChunkSize = 50
+Strategy.UseSolver = F
+Strategy.Steps = [add3]
+Strategy.ChunkSize = 100
+
+
+Step.add3.Operation = ADD
+Step.add3.Model.Sources = []
+Step.add3.Model.Beam.Enable = T
+Step.add3.Model.Beam.Mode = ARRAY_FACTOR
+Step.add3.Model.DirectionalGain.Enable = F
+Step.add3.Output.Column = CORRECTED_DATA

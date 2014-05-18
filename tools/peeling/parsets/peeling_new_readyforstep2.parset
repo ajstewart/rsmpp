@@ -1,0 +1,93 @@
+######################################################
+#
+# ddep.parset
+#
+
+Strategy.InputColumn = DATA
+Strategy.ChunkSize = 50
+Strategy.UseSolver = F
+Strategy.Steps = [subtractfield, add1, solve, subtractstrong1, add2, solve2, correct]
+Strategy.ChunkSize = 100
+Strategy.Baselines = [CR]S*&
+
+Step.subtractfield.Operation = SUBTRACT
+Step.subtractfield.Model.Sources = []
+Step.subtractfield.Model.Beam.Enable = T
+Step.subtractfield.Model.Beam.Mode = ARRAY_FACTOR
+
+Step.add1.Operation = ADD
+Step.add1.Model.Sources = [Sources to be peeled]
+Step.add1.Model.Beam.Enable = T
+Step.add1.Model.Beam.Mode = ARRAY_FACTOR
+
+Step.solve.Operation = SOLVE
+Step.solve.Model.Sources = [Sources to be peeled]
+Step.solve.Model.DirectionalGain.Enable = T
+Step.solve.Model.Cache.Enable = T
+Step.solve.Model.Beam.Enable = T
+Step.solve.Model.Beam.Mode = ARRAY_FACTOR
+Step.solve.Model.Phasors.Enable = F
+Step.solve.Solve.Mode = COMPLEX
+Step.solve.Solve.Parms = ["DirectionalGain:0:0:*","DirectionalGain:1:1:*"]
+Step.solve.Solve.CellSize.Freq = 0
+Step.solve.Solve.CellSize.Time = 5
+Step.solve.Solve.CellChunkSize = 10
+Step.solve.Solve.Options.MaxIter = 50
+Step.solve.Solve.Options.EpsValue = 1e-9
+Step.solve.Solve.Options.EpsDerivative = 1e-9
+Step.solve.Solve.Options.ColFactor = 1e-9
+Step.solve.Solve.Options.LMFactor = 1.0
+Step.solve.Solve.Options.BalancedEqs = F
+Step.solve.Solve.Options.UseSVD = T
+#Step.solve.Solve.UVRange = [0, 1200]
+
+Step.subtractstrong1.Operation = SUBTRACT
+Step.subtractstrong1.Model.Sources = [Sources to be peeled]
+Step.subtractstrong1.Model.Phasors.Enable = F
+Step.subtractstrong1.Model.DirectionalGain.Enable = T
+Step.subtractstrong1.Model.Beam.Enable = T
+Step.subtractstrong1.Model.Beam.Mode = ARRAY_FACTOR
+
+Step.add2.Operation = ADD
+Step.add2.Model.Sources = [All unpeeled sources]
+Step.add2.Model.Beam.Enable = T
+Step.add2.Model.Beam.Mode = ARRAY_FACTOR
+Step.add2.Model.DirectionalGain.Enable = F
+Step.add2.Output.Column = PREDIG_DATA
+
+Step.solve2.Operation = SOLVE
+Step.solve2.Model.Sources = [All unpeeled sources]
+Step.solve2.Model.DirectionalGain.Enable = F
+Step.solve2.Model.Gain.Enable = T
+Step.solve2.Model.Cache.Enable = T
+Step.solve2.Model.Beam.Enable = T
+Step.solve2.Model.Beam.Mode = ARRAY_FACTOR
+Step.solve2.Model.Phasors.Enable = T
+Step.solve2.Solve.Mode = PHASE
+Step.solve2.Solve.Parms = ["Gain:0:0:Phase:*","Gain:1:1:Phase:*"]
+Step.solve2.Solve.CellSize.Freq = 0
+Step.solve2.Solve.CellSize.Time = 5
+Step.solve2.Solve.CellChunkSize = 10
+Step.solve2.Solve.Options.MaxIter = 50
+Step.solve2.Solve.Options.EpsValue = 1e-9
+Step.solve2.Solve.Options.EpsDerivative = 1e-9
+Step.solve2.Solve.Options.ColFactor = 1e-9
+Step.solve2.Solve.Options.LMFactor = 1.0
+Step.solve2.Solve.Options.BalancedEqs = F
+Step.solve2.Solve.Options.UseSVD = T
+
+Step.correct.Operation = CORRECT
+Step.correct.Model.Sources = []
+Step.correct.Model.Phasors.Enable = T
+Step.correct.Model.Gain.Enable = T
+Step.correct.Model.DirectionalGain.Enable = F
+Step.correct.Model.Beam.Enable = T
+Step.correct.Model.Beam.Mode = ARRAY_FACTOR
+Step.correct.Output.Column =PEELED_DATA
+
+#Step.add3.Operation = ADD
+#Step.add3.Model.Sources = [Sources to be peeled]
+#Step.add3.Model.Beam.Enable = T
+#Step.add3.Model.Beam.Mode = ARRAY_FACTOR
+#Step.add3.Model.DirectionalGain.Enable = F
+#Step.add3.Output.Column = CORRECTED_DATA

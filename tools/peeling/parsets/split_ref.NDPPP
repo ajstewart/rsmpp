@@ -1,0 +1,5 @@
+msin = ./msfiles/L53359_SAP000_BAND4.MS
+msin.datacolumn = CORRECTED_DATA
+msout = ./msfiles/L53359_SAP000_BAND4.MS.DICAL
+msout.datacolumn = DATA
+steps = [count]

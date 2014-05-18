@@ -1,0 +1,13 @@
+msin.startchan = 0
+msin.nchan = 0   
+
+# steps = [preflag2, preflag]   # if defined as [] the MS will be copied and NaN/infinite will be flagged
+steps = []   # if defined as [] the MS will be copied and NaN/infinite will be flagged
+
+preflag.type=preflagger
+preflag.corrtype=cross
+preflag.baseline=[DE*,SE*,UK*,FR*]
+
+preflag2.type=preflagger
+preflag2.corrtype=cross
+preflag2.amplmin=1e-30

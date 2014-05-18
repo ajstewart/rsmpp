@@ -1,0 +1,17 @@
+weight=briggs
+robust=0
+npix=1280
+cellsize=20arcsec
+data=CORRECTED_DATA
+padding=1.5
+niter=5000
+stokes=I
+operation=mfclark
+oversample=5
+wmax=8000
+cyclefactor=1.5
+gain=0.1
+timewindow=300
+ChanBlockSize=2
+ApplyElement=0
+UVmin=0.1
