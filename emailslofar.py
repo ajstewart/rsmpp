@@ -15,7 +15,8 @@ default_email_config_file = "~as24v07/.email_acc"
 
 known_users={"mp":"Malgorzata.Pietka@astro.ox.ac.uk", "ag5g08":"ag5g08@soton.ac.uk", "jb34g09":"Jess.Broderick@astro.ox.ac.uk", 
 "as24v07":"adam.stewart@astro.ox.ac.uk", "vh1n11":"V.Heesen@soton.ac.uk", "cr1g12":"cr1g12@soton.ac.uk", 
-"jharwood":"jeremy.harwood@askanastronomer.co.uk", "tmc1n12":"tmc1n12@soton.ac.uk"}
+"jharwood":"jeremy.harwood@askanastronomer.co.uk", "tmc1n12":"tmc1n12@soton.ac.uk", "jbroderick":"Jess.Broderick@astro.ox.ac.uk",
+"pietka":"Malgorzata.Pietka@astro.ox.ac.uk", "stewart":"adam.stewart@astro.ox.ac.uk"}
   
 def prompt_for_config( config_filename = default_email_config_file ):
     default_smtp_server = "smtp.googlemail.com"
