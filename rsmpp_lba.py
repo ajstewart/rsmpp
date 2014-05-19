@@ -599,7 +599,7 @@ else:
 
 		#Now working through the steps starting with NDPPP (see rsmpp_funcs.py for functions)
 		postcorrupt=0
-		for i in targets.keys():
+		for i in sorted(targets.keys()):
 			log.info("Starting Initial NDPPP for {0}...".format(i))
 			current_obs=i
 			#Nearly all functions are used with partial such that they can be passed to .map
@@ -833,7 +833,6 @@ else:
 			em.send_email(emacc,user_address,"rsmpp Job Completed","{0},\n\nYour job {1} has been completed - finished at {2} UTC with a runtime of {3}".format(user,newdirname, date_time_end, tdelta))
 
 		os.chdir("..")
-		subprocess.call(["rm", "emailslofar.py", "quick_keys.py", "emailslofar.pyc", "quick_keys.pyc"])
 		log.info("Run finished at {0} UTC with a runtime of {1}".format(date_time_end, str(tdelta)))
 		subprocess.call(["cp", "rsmpp_lba.log", "{0}/rsmpp_lba_{0}.log".format(newdirname)])
 	except Exception, e:

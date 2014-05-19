@@ -375,10 +375,10 @@ def AW_Steps(g, aw_sets, maxb, aw_env, niter, automaticthresh, bandsthreshs_dict
 	beam=int(g.split("SAP")[1][:3])
 	beamc="SAP00{0}".format(beam)
 	finish_iters=niter
+	aw_parset_name="aw_{0}.parset".format(g.split("/")[-1])
 	if automaticthresh:
 		# finish_iters+=initialiter
 		curr_band=g.split("BAND")[1][:2]
-		aw_parset_name="aw_{0}.parset".format(g.split("/")[-1])
 		local_parset=open(aw_parset_name, 'w')
 		local_parset.write("\nms={0}\n\
 image={0}.img\n\
