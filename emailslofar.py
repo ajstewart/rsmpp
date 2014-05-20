@@ -13,10 +13,10 @@ import base64
         
 default_email_config_file = "~as24v07/.email_acc"
 
-known_users={"mp":"Malgorzata.Pietka@astro.ox.ac.uk", "ag5g08":"ag5g08@soton.ac.uk", "jb34g09":"Jess.Broderick@astro.ox.ac.uk", 
-"as24v07":"adam.stewart@astro.ox.ac.uk", "vh1n11":"V.Heesen@soton.ac.uk", "cr1g12":"cr1g12@soton.ac.uk", 
-"jharwood":"jeremy.harwood@askanastronomer.co.uk", "tmc1n12":"tmc1n12@soton.ac.uk", "jbroderick":"Jess.Broderick@astro.ox.ac.uk",
-"pietka":"Malgorzata.Pietka@astro.ox.ac.uk", "stewart":"adam.stewart@astro.ox.ac.uk"}
+known_users={'as24v07': 'YWRhbS5zdGV3YXJ0QGFzdHJvLm94LmFjLnVr', 'ag5g08': 'YWc1ZzA4QHNvdG9uLmFjLnVr', 'jharwood': 'amVyZW15Lmhhcndvb2RAYXNrYW5hc3Ryb25vbWVyLmNvLnVr', 
+'jb34g09': 'SmVzcy5Ccm9kZXJpY2tAYXN0cm8ub3guYWMudWs=', 'tmc1n12': 'dG1jMW4xMkBzb3Rvbi5hYy51aw==', 'pietka': 'TWFsZ29yemF0YS5QaWV0a2FAYXN0cm8ub3guYWMudWs=', 
+'mp': 'TWFsZ29yemF0YS5QaWV0a2FAYXN0cm8ub3guYWMudWs=', 'jbroderick': 'SmVzcy5Ccm9kZXJpY2tAYXN0cm8ub3guYWMudWs=', 'cr1g12': 'Y3IxZzEyQHNvdG9uLmFjLnVr', 
+'stewart': 'YWRhbS5zdGV3YXJ0QGFzdHJvLm94LmFjLnVr', 'vh1n11': 'Vi5IZWVzZW5Ac290b24uYWMudWs='}
   
 def prompt_for_config( config_filename = default_email_config_file ):
     default_smtp_server = "smtp.googlemail.com"

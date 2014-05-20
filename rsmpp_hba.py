@@ -155,7 +155,7 @@ parser.add_option_group(group)
 try:
 	emacc=em.load_account_settings_from_file(os.path.join(mainrootpath, ".email_acc"))
 	known_users=em.known_users
-	user_address=known_users[user]
+	user_address=base64.b64decode(known_users[user])
 	mail=True
 except:
 	mail=False
@@ -569,7 +569,7 @@ Script now exiting...".format(i, data_dir))
 					g.write("SB{0} calibrator missing in observation {1}\n".format('%03d' % s, j))
 					missing_count+=1
 			for b in beams:
-				#This now uses a function to check all the targets, now knowing what calibs are missing - which without nothing can be done
+				#This now uses a function to check all the targets, now missing what calibs are missing - which without nothing can be done
 				localmiss=rsmhbaf.check_targets(i, b, targets, targets_corrupt, rsm_bands, rsm_band_numbers, rsm_bands_lens, missing_calibrators, data_dir, diff, g, subsinbands)
 				missing_count+=localmiss
 				#covers run if user accidentally adds a beam which is missing or doesn't exist.

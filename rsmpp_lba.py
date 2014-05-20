@@ -150,7 +150,7 @@ parser.add_option_group(group)
 try:
 	emacc=em.load_account_settings_from_file(os.path.join(mainrootpath, ".email_acc"))
 	known_users=em.known_users
-	user_address=known_users[user]
+	user_address=base64.b64decode(known_users[user])
 	mail=True
 except:
 	mail=False
