@@ -903,5 +903,5 @@ Script now exiting...".format(i, data_dir))
 		subprocess.call(["cp", os.path.join(root_dir, "rsmpp_hba.log"), "rsmpp_hba_CRASH.log".format(newdirname)])
 		if mail==True:
 			em.send_email(emacc,user_address,"rsmpp Job Error","{0},\n\nYour job {1} crashed with the following error:\n\n{2}\n\nTime of crash: {3}".format(user,newdirname,e, end))
-			em.send_email(emacc,"adam.stewart@astro.ox.ac.uk","rsmpp Job Error","{0}'s job '{1}' just crashed with the following error:\n\n{2}\n\nTime of crash: {3}".format(user,newdirname,e,end))
+			em.send_email(emacc,"adam.stewart@astro.ox.ac.uk","rsmpp Job Error","{0}'s job '{1}' just crashed with the following error:\n\n{2}\n\nDirectory: {3}\n\nTime of crash: {4}".format(user,newdirname,e,root_dir,end))
 				
