@@ -524,7 +524,7 @@ else:
 			for s in calib_range:
 				if s not in present_calibs:
 					missing_calibrators[i].append(s)		#Checks which ones are missing and records them
-					g.write("SB{0} calibrator missing in observation {1}\n".format('%03d' % s, j))
+					g.write("SB{0} calibrator missing in observation {1}\n".format('%03d' % s, i))
 					missing_count+=1	
 			for b in beams:
 				#This now uses a function to check all the targets, now knowing what calibs are missing - which without nothing can be done
