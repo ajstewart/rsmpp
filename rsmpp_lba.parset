@@ -3,7 +3,7 @@
 [GENERAL]
 nice=10
 lightweight=on
-nobservations=12
+ncores=12
 output=rsmpp_lba_output
 loglevel=INFO
 overwrite=on
@@ -48,7 +48,7 @@ peelsources=0
 
 [IMAGING]
 imaging=off
-automaticthresh=of
+automaticthresh=off
 initialiter=500
 bandrms=0.053,0.038,0.035,0.028
 maxbunit=UV
