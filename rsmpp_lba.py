@@ -9,7 +9,7 @@
 
 #Written by Adam Stewart, Last Update May 2014
 
-#---Version 2.1---
+#---Version 2.1.0---
 
 import subprocess, multiprocessing, os, glob, optparse, sys, datetime, string, getpass, time, logging, ConfigParser
 from functools import partial
