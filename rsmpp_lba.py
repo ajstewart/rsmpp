@@ -20,7 +20,7 @@ import pyrap.tables as pt
 from itertools import izip
 import numpy as np
 import emailslofar as em
-vers="2.00"
+vers="2.1"
 
 #import functions file
 import rsmpp_lbafuncs as rsmlbaf
