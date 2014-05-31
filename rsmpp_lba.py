@@ -2,19 +2,14 @@
 
 #rsmpp_lba.py
 
-#Run 'python rsmpp_lba.py -h' for full details and usage.
-
 #LOFAR LBA RSM data processing script designed for the Southampton lofar machines.
 
 #A full user guide can be found on google docs here:
-#https://docs.google.com/document/d/1IWtL0Cv-x5Y5I_tut4wY2jq7M1q8DJjkUg3mCWL0r4E/
+# https://docs.google.com/document/d/1aqUxesq4I02i1mKJw_XHjLy0smCbL37uhtBpNf9rs9w/
 
-#Written by Adam Stewart, Last Update June 2013
+#Written by Adam Stewart, Last Update May 2014
 
-#All the same as HBA version apart from:
-
-#---Version 2.00---
-
+#---Version 2.0.0---
 
 import subprocess, multiprocessing, os, glob, optparse, sys, datetime, string, getpass, time, logging, ConfigParser
 from functools import partial
@@ -23,7 +18,7 @@ import pyrap.tables as pt
 from itertools import izip
 import numpy as np
 import emailslofar as em
-vers="2.00"
+vers="2.0.0"
 
 #import functions file
 import rsmpp_lbafuncs as rsmlbaf
