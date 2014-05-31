@@ -2,11 +2,19 @@
 
 [GENERAL]
 nice=10
+loglevel=INFO
 lightweight=on
 ncores=12
 output=rsmpp_lba_output
-loglevel=INFO
 overwrite=on
+
+[LTA]
+LTAfetch=off
+htmlfile=html.txt
+n_simult_dwnlds=6
+missing_attempts=10
+delay=120
+savedir=/media/RAIDD/lofar_data/
 
 [DATA]
 obsids=to_process.py

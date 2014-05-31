@@ -1,20 +1,17 @@
 #!/usr/bin/env python
 
-#rsmpp.py
+#rsmpp_hba.py
 
-#Run 'python rsmpp.py -h' for full details and usage.
+#Run 'python rsmpp_hba.py -h' for full details and usage.
 
 #LOFAR RSM data processing script designed for the Southampton lofar machines.
 
 #A full user guide can be found on google docs here:
-#https://docs.google.com/document/d/1IWtL0Cv-x5Y5I_tut4wY2jq7M1q8DJjkUg3mCWL0r4E
+# https://docs.google.com/document/d/1aqUxesq4I02i1mKJw_XHjLy0smCbL37uhtBpNf9rs9w
 
 #Written by Adam Stewart, Last Update May 2014
 
-#---Version 2.00---
-#
-
-#Older notes moved to google doc
+#---Version 2.1---
 
 import subprocess, multiprocessing, os, glob, optparse, sys, datetime, string, getpass, time, logging, ConfigParser, base64
 from functools import partial
@@ -24,7 +21,7 @@ from itertools import izip
 import numpy as np
 #import stuff for email
 import emailslofar as em
-vers="2.00"	#Current version number
+vers="2.1"	#Current version number
 
 import rsmpp_hbafuncs as rsmhbaf
 import rsmppsharedfuncs as rsmshared
@@ -95,6 +92,14 @@ group.add_option("-D", "--lightweight", action="store_true", dest="destroy", def
 group.add_option("-n", "--ncores", action="store", type="int", dest="ncores", default=config.getint("GENERAL", "ncores"), help="Specify the number of observations to process simultaneously (i.e. the number of cores to use)[default: %default]")
 group.add_option("-o", "--output", action="store", type="string", dest="newdir", default=config.get("GENERAL", "output"),help="Specify name of the directoy that the output will be stored in [default: %default]")
 group.add_option("-w", "--overwrite", action="store_true", dest="overwrite", default=config.getboolean("GENERAL", "overwrite"),help="Use this option to overwrite output directory if it already exists [default: %default]")
+parser.add_option_group(group)
+group = optparse.OptionGroup(parser, "LTA Options")
+group.add_option("--LTAfetch", action="store_true", dest="lta", default=config.getint("LTA", "LTAfetch"), help="Turn on or off LTA data fetching [default: %default]")
+group.add_option("--htmlfile", action="store", type="string", dest="htmlfile", default=config.get("LTA", "htmlfile"),help="LTA html.txt file with wget addresses [default: %default]")
+group.add_option("--n_simult_dwnlds", action="store", type="int", dest="ltacores", default=config.getint("LTA", "n_simult_dwnlds"), help="Specify the number of simultaneous downloads [default: %default]")
+group.add_option("--missing_attempts", action="store", type="int", dest="missattempts", default=config.getboolean("LTA", "missing_attempts"),help="How many attempts will be made to retrive failed downloads (i.e. missing files from the html file) [default: %default]")
+group.add_option("--delay", action="store", type="int", dest="ltadelay", default=config.getint("LTA", "delay"), help="Time in seconds between each missing file attempt [default: %default]")
+group.add_option("--savedir", action="store", type="string", dest="ltadir", default=config.get("LTA", "savedir"),help="Directory to save data from LTA [default: %default]")
 parser.add_option_group(group)
 group = optparse.OptionGroup(parser, "Data Options")
 group.add_option("--obsids", action="store", type="string", dest="obsids", default=config.get("DATA","obsids"), help="Use this to bypass using to_process.py, manually list the ObsIds you want to run in the format\
@@ -247,6 +252,13 @@ destroy=options.destroy	#lightweight mode on or off
 bandsno=options.bandsno	#number of bands there should be
 subsinbands=options.subsinbands	#number of sub bands to combine to make a band
 toprocess=options.obsids	#toprocess variable - what ID's to run
+lta=options.lta	#fetch data from lta on or off
+html=options.htmlfile	#lta html file
+missattempts=options.missattempts	#lta missing attempts
+ltadelay=options.delay	#delay between attempts
+ltadir=options.ltadir	#save data to directory
+ltacores=options.ltacores #number of downloads
+
 #Now gather the ids that will be run, either from a file or if not a text input.
 if toprocess!="to_process.py":
 	if "," in toprocess:
@@ -331,36 +343,57 @@ if calmodel=="AUTO":
 else:
 	if not os.path.isfile(calmodel):
 		log.error("Cannot locate {0}, please check your calmodel file is present\n\
-If you would like to automatically fetch the calibrator skymodel do not use the -s option.\nScript now exiting...".format(skymodel))
+If you would like to automatically fetch the calibrator skymodel set the calmodel option to 'AUTO'.\nScript now exiting...".format(skymodel))
 		sys.exit()
 	else:
 		create_cal=False	
 
+#LTA checks
+if lta:
+	userhome=os.path.expanduser("~")
+	wgetfile=os.path.join(userhome, ".wgetrc")
+	if not os.path.isfile(wgetfile):
+		log.critical("No '.wgetrc' file detected in home directory - LTA wget will fail.")
+		log.critical("Please set up and try again.")
+		sys.exit()
+	if not os.path.isfile(html):
+		log.critical("Cannot locate {0}, please check file is present\nScript now exiting...".format(ndppp_parset))
+		sys.exit()	
+	if ltadir!=data_dir:
+		data_dir=ltadir
+	if not os.path.isdir(data_dir):
+		try:
+			os.makedirs(data_dir)
+		except:
+			log.critical("The destination directory for the LTA transfer doesn't seem to exist and cannot be created")
+			log.critical("Script now exiting...")
+			sys.exit()
+	
 log.info("Checking required parsets...")
 #NDPPP parset
-if os.path.isfile(ndppp_parset)==False:
+if not os.path.isfile(ndppp_parset):
 	log.critical("Cannot locate {0}, please check file is present\nScript now exiting...".format(ndppp_parset))
 	sys.exit()
 #Check data dir
-if os.path.isdir(data_dir) == False:
+if not os.path.isdir(data_dir):
 	log.critical("Data Directory \"{0}\" doesn't seem to exist..., please check it has been set correctly.\n\
 Script now exiting...".format(data_dir))
 	sys.exit()
 #Check the phase only parset
-if os.path.isfile(phaseparset)==False:
+if not os.path.isfile(phaseparset):
 	log.critical("Cannot locate {0}, please check file is present\nScript now exiting...".format(phaseparset))
 	sys.exit()
 #Checks presence of the parset files
-if os.path.isfile(calparset)==False:
+if not os.path.isfile(calparset):
 	log.critical("Cannot locate {0}, please check file is present\nScript now exiting...".format(calparset))
 	sys.exit()
-if os.path.isfile(correctparset)==False:
+if not os.path.isfile(correctparset):
 	log.critical("Cannot locate {0}, please check file is present\nScript now exiting...".format(correctparset))
 	sys.exit()
-if os.path.isfile(dummy)==False:
+if not os.path.isfile(dummy):
 	log.critical("Cannot locate {0}, please check file is present\nScript now exiting...".format(dummy))
 	sys.exit()
-	
+
 #----------------------------------------------------------------------------------------------------------------------------------------------
 #																		PHASE ONLY STAGE
 #----------------------------------------------------------------------------------------------------------------------------------------------
@@ -450,8 +483,107 @@ else:
 	if not os.path.isdir('logs'):
 		os.mkdir('logs')
 	#copy over parset file used
+	if lta:
+		subprocess.call(["cp","-r","{0}".format(os.path.join("..", html)), "."])
 	subprocess.call(["cp",os.path.join("..", config_file), config_file+"_used"])
+	
+	#----------------------------------------------------------------------------------------------------------------------------------------------
+	#																			LTA Fetch
+	#----------------------------------------------------------------------------------------------------------------------------------------------
 
+	if lta:
+		log.info("LTA data fetch starting...")
+		#Set up LTA specific workers for downloading
+		lta_workers=Pool(processes=ltacores)
+		#Fetch the html file to be used
+		subprocess.call(["cp","-r",html, data_dir])
+		#Switch to data_dir, read in html file and start downloading
+		os.chdir(data_dir)
+		html_temp=open(file, 'r')
+		initfetch=[htmlline.rstrip('\n') for htmlline in html_temp]
+		html_temp.close()
+		log.info("Fetching Files...")
+		lta_workers.map(rsmshared.fetch, initfetch)
+		log.info("Initial fetch complete!")
+		#Start the checking for missing files
+		log.info("Checking for missing files...")
+		for attempt in range(missattempts):
+			log.info("----------------------------------------------------------------------------------------")
+			log.info("Running Missing File Check {0} of {1}".format(attempt+1, missattempts))
+			#Files downloaded should match those in the html file with a few changes
+			tofetch=[k for k in initfetch if not os.path.isfile(k.split('lofigrid/')[-1].replace('/', '%2F'))]
+			if len(tofetch) < 1:
+				log.info("0 files remain to fetch")
+				#if no more missing then break the for loop
+				break
+			else:
+				log.warning("{0} files remain to fetch:".format(len(tofetch)))
+				log.info("----------------------------------------")
+				#Print out missing files and proceed to attempt to fetch with delay
+				for ltafile in tofetch:
+					log.info(ltafile.split("/")[-1])
+				log.info("----------------------------------------")
+				log.info("Waiting {0} seconds before attempting to fetch missing files...")
+				time.sleep(ltadelay)
+				lta_workers.map(rsmshared.fetch, tofetch)
+				
+		log.info("LTA fetch complete!")
+		#Need to prepare data for pipeline: untar -> rename -> organise into dirs
+		log.info("Preparing data for pipeline use...")
+		ltaoutput=sorted(glob.glob("*.tar"))
+		log.info("Unpacking data...")
+		for tar in ltaoutput:
+			#Untar files one at a time as doing multiple really hits disc writing speed
+			rsmshared.untar(tar)
+		ltaoutput2=sorted(glob.glob("*.MS"))
+		if len(ltaoutput2)<1:
+			#Stop the pipeline if something has gone wrong and no .MS files are present
+			log.critical("No data files detected after unpacking! Did the download work?")
+			sys.exit()
+		else:
+			log.info("Renaming LTA output...")
+			lta_workers=Pool(processes=n)
+			lta_workers.map(rsmshared.rename1, ltaoutput2)
+			log.info("Organising files...")
+			ltaoutput3=sorted(glob.glob("*.dppp"))
+			#Obtain a list of unique IDs
+			ltaobsids=[ltams.split("_")[0] for ltams in ltaoutput3]
+			uniq_ltaobsids=sorted(list(set(ltaobsids)))
+			for lta_id in uniq_ltaobsids:
+				#Check if directory already exists
+				if os.path.isdir(lta_id):
+					log.critical("Obs ID directory already exists in data directory - will not overwrite or move files.".)
+					log.critical("Please check and organise the downloaded data - rsmpp-rename.py can help with this.".)
+					log.critical("Once done the pipeline can be re-ran with LTA mode off, just point to the data directory.".)
+					sys.exit()
+				else:	
+					os.mkdir(lta_id)
+			lta_workers.map(rsmshared.organise, ltaoutput3)
+			#The IDs should match those defined in to_process
+			obsids_toremove=[]
+			for obsid in to_process:
+				if obsid not in uniq_ltaobsids:
+					log.warning("Requested ObsID to process {0} doesn't seem to have been downloaded from the LTA - removed from processing list.".format(obsid))
+					obsids_toremove.append(obsid)
+			#remove obs ids outside of loop otherwise problems occur
+			for obsdel in obsids_toremove:
+				to_process.remove(obsdel)
+			#Perhaps user forgot to change obs ids in to process - check for this and switch to the ids downloaded if necessary
+			if len(to_process) < 2:
+				log.warning("The to_process obs ids list contains less than the minimum number required.")
+				log.warning("Switching to process the data downloaded from the LTA.")
+				to_process=uniq_ltaobsids
+					
+			log.info("Data ready for pipeline use!")
+			log.info("Removing LTA tar files...")
+			lta_workers.map(rsmshared.deletefile, ltaoutput)
+			log.info("Done!")
+			log.info("All LTA steps completed.")
+		
+		#Change back to output directory
+		os.chdir(working_dir)
+	
+	
 	#----------------------------------------------------------------------------------------------------------------------------------------------
 	#																Load in User List and Check Data Presence
 	#----------------------------------------------------------------------------------------------------------------------------------------------
