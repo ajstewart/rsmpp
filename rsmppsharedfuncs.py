@@ -34,6 +34,31 @@ class Ddict(dict):
 			self[key] = self.default()
 		return dict.__getitem__(self, key)
 
+def fetch(file):
+	"""Simple wget get line"""
+	log.info("Fetching {0}...".format(file.split("/")[-1]))
+	subprocess.call("wget {0} > /dev/null 2>&1".format(file), shell=True)
+	
+def untar(file):
+	"""Simple wget get line"""
+	subprocess.call("tar --force-local -xvf {0} > /dev/null 2>&1".format(file), shell=True)
+	
+def rename1(SB):
+	SBtable=pt.table("{0}/OBSERVATION".format(SB), ack=False)
+	newname=SBtable.col("LOFAR_FILENAME")[0]
+	SBtable.close()
+	if newname.endswith(".MS"):
+		newname+=".dppp"
+	subprocess.call(["mv", SB, newname])
+	
+def organise(SB):
+	obsid=SB.split("_")[0]
+	subprocess.call(["mv", SB, os.path.join(obsid, SB)])
+	
+def deletefile(file):
+	"""Only files not directories"""
+	os.remove(file)
+
 def clean(f):
 	"""Function to 'clean' a sky model. It removes double sources, A-team sources and replaces MSSS calibrators with MSSS calibrator models."""
 	Ateam=["2323.2+5850", "2323.4+5849", "1959.4+4044"]
