@@ -32,3 +32,5 @@ LOFAR Imaging Tools also required. (LofIm tools)
 ============
 
 Standalone product - no installation really required. Just clone the entire directory and scripts will be ready to run.
+
+If you would like to use the email function please contact me to obtain the pipeline email account password.
