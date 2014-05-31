@@ -152,6 +152,9 @@ try:
 	known_users=em.known_users
 	user_address=base64.b64decode(known_users[user])
 	mail=True
+	#turn mail off if not configured
+	if emacc['email_account_password']=="contactme":
+		mail=False
 except:
 	mail=False
 
