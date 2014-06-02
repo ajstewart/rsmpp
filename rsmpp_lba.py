@@ -811,7 +811,7 @@ else:
 				pool.map(create_mosaic_multi, target_obs)
 				for i in target_obs:
 					os.chdir(i)
-					subprocess.call("mv *mosaic* images/mosaics", shell=True)
+					subprocess.call("mv *mosaic* images/mosaics/", shell=True)
 					os.chdir("..")
 	
 		#----------------------------------------------------------------------------------------------------------------------------------------------
