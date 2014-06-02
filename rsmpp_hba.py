@@ -7,9 +7,10 @@
 #A full user guide can be found on google docs here:
 # https://docs.google.com/document/d/1aqUxesq4I02i1mKJw_XHjLy0smCbL37uhtBpNf9rs9w/
 
-#Written by Adam Stewart, Last Update May 2014
+#Written by Adam Stewart, Last Update June 2014
 
-#---Version 2.0.0---
+#---Version 2.0.1---
+#Fixed LBA Phase-only bug
 
 import subprocess, multiprocessing, os, glob, optparse, sys, datetime, string, getpass, time, logging, ConfigParser, base64
 from functools import partial
@@ -19,7 +20,7 @@ from itertools import izip
 import numpy as np
 #import stuff for email
 import emailslofar as em
-vers="2.0.0"	#Current version number
+vers="2.0.1"	#Current version number
 
 import rsmpp_hbafuncs as rsmhbaf
 import rsmppsharedfuncs as rsmshared

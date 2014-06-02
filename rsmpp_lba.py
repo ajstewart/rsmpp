@@ -7,9 +7,10 @@
 #A full user guide can be found on google docs here:
 # https://docs.google.com/document/d/1aqUxesq4I02i1mKJw_XHjLy0smCbL37uhtBpNf9rs9w/
 
-#Written by Adam Stewart, Last Update May 2014
+#Written by Adam Stewart, Last Update June 2014
 
-#---Version 2.0.0---
+#---Version 2.0.1---
+#Fixed LBA Phase-only bug
 
 import subprocess, multiprocessing, os, glob, optparse, sys, datetime, string, getpass, time, logging, ConfigParser
 from functools import partial
@@ -18,7 +19,7 @@ import pyrap.tables as pt
 from itertools import izip
 import numpy as np
 import emailslofar as em
-vers="2.0.0"
+vers="2.0.1"
 
 #import functions file
 import rsmpp_lbafuncs as rsmlbaf
@@ -391,7 +392,7 @@ if phaseO:
 						log.critical("{0} already exists! Use overwrite option or change output name.".format(newoutput))
 						sys.exit()
 				os.mkdir(newoutput)
-		tophase=sorted(glob.glob("L*/L*BAND{0}_*.dppp".format(phase_pattern)))
+		tophase=sorted(glob.glob("L*/L*BAND{0}*.dppp".format(phase_pattern)))
 		workers=Pool(processes=n)
 		standalone_phase_multi=partial(rsmshared.standalone_phase, phaseparset=phaseparset, flag=flag, toflag=toflag, autoflag=autoflag, create_sky=create_sky, skymodel=skymodel, phaseoutput=phase_name, phasecolumn=phase_col)
 		workers.map(standalone_phase_multi, tophase)
