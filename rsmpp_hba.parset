@@ -19,6 +19,7 @@ precalibrated=no
 precalibratedloc=DATA
 
 [PROCESSING]
+rficonsole=off
 autoflag=on
 postcut=0
 PHASEONLY=off

@@ -98,6 +98,7 @@ group.add_option("-E", "--remaindersubbands", action="store", type=int, dest="re
 scheme chosen - they will be added to the last band [default: %default]")
 parser.add_option_group(group)
 group = optparse.OptionGroup(parser, "Processing Options")
+group.add_option("--rficonsole", action="store_true", dest="rfi", default=config.getboolean("PROCESSING", "rficonsole"),help="Use this option to run rficonsole before phase-only calibration [default: %default]")
 group.add_option("-f", "--flag", action="store_true", dest="autoflag", default=config.getboolean("PROCESSING", "autoflag"),help="Use this option to use autoflagging in processing [default: %default]")
 group.add_option("-t", "--postcut", action="store", type="int", dest="postcut", default=config.getint("PROCESSING", "postcut"),help="Use this option to enable post-bbs flagging, specifying the cut level [default: %default]")
 group.add_option("-P", "--PHASEONLY", action="store_true", dest="PHASEONLY", default=config.getboolean("PROCESSING", "PHASEONLY"),help="Choose just to perform only a phase only calibration on an already EXISTING rsmpp output [default: %default]")
@@ -233,6 +234,8 @@ bandsno=options.bandsno
 subsinbands=options.subsinbands
 toprocess=options.obsids
 remaindersbs=options.remaindersbs
+rfi=options.rfi
+mode="UNKNOWN"
 if toprocess!="to_process.py":
 	if "," in toprocess:
 		toprocess_list=sorted(toprocess.split(","))
@@ -645,6 +648,13 @@ else:
 					temp=pt.table("{0}/SPECTRAL_WINDOW".format(targets[i][beamc][0]), ack=False)
 					nchans=int(temp.col("NUM_CHAN")[0])
 					log.info("Number of channels in a sub band: {0}".format(nchans))
+					if mode=="UNKNOWN":
+						msfreq=show_freq = ft.getcell('REF_FREQUENCY',0)
+						if int(msfreq)/1e6 < 100:
+							mode="LBA"
+						else:
+							mode="HBA"
+						log.info("Data observing mode: {0}".format(mode))
 					temp.close()
 				if not os.path.isfile("post_ndppp_corrupt_report.txt"):
 					corrupt_report=open("post_ndppp_corrupt_report.txt", 'w')
@@ -674,13 +684,16 @@ else:
 			# calibrate step 1 process
 			if not precal:
 				log.info("Calibrating calibrators and transfering solutions for {0}...".format(i))
-				calibrate_msss1_multi=partial(rsmlbaf.calibrate_msss1, beams=beams, diff=diff, calparset=calparset, calmodel=calmodel, correctparset=correctparset, dummy=dummy, calibbeam=calibbeam)
+				calibrate_msss1_multi=partial(rsmlbaf.calibrate_msss1, beams=beams, diff=diff, calparset=calparset, 
+				calmodel=calmodel, correctparset=correctparset, dummy=dummy, calibbeam=calibbeam, mode=mode, rfi=rfi)
 				if __name__ == '__main__':
 					worker_pool.map(calibrate_msss1_multi, calibs[i])
 			else:
 				log.info("Data is precalibrated - calibrator calibration has been skipped")
 
 		log.info("Done!")
+		
+		
 		#Combine the bands
 		log.info("Creating Bands for all sets...")
 		rsm_bandsndppp_multi=partial(rsmshared.rsm_bandsndppp, rsm_bands=rsm_bands)
