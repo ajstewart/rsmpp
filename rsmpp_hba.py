@@ -846,7 +846,7 @@ Script now exiting...".format(i, data_dir))
 				os.chdir(i)
 				os.mkdir("images")
 				subprocess.call("mv *.fits images", shell=True)
-				subprocess.call("mv *.model *.residual *.psf *.restored *0.avgpb *.img0.spheroid_cut* *.corr images", shell=True)
+				subprocess.call("mv *.model *.residual *.psf *.restored *.avgpb *.img0.spheroid_cut* *.corr images", shell=True)
 				os.chdir("..")
 			log.info("Creating averaged images...")
 			average_band_images_multi=partial(rsmshared.average_band_images, beams=beams)
@@ -856,6 +856,10 @@ Script now exiting...".format(i, data_dir))
 				create_mosaic_multi=partial(rsmshared.create_mosaic, band_nums=rsm_band_numbers, chosen_environ=chosen_environ, pad=userpad, avgpbr=avpbrad)
 				pool=Pool(processes=len(rsm_band_numbers))
 				pool.map(create_mosaic_multi, target_obs)
+				for i in target_obs:
+					os.chdir(i)
+					subprocess.call("mv *mosaic* images/mosaics", shell=True)
+					os.chdir("..")
 				
 		#----------------------------------------------------------------------------------------------------------------------------------------------
 		#																End of Process
@@ -880,7 +884,7 @@ Script now exiting...".format(i, data_dir))
 		for t in target_obs:
 			subprocess.call("mv {0}/*_uv.MS.dppp {0}/datasets".format(t), shell=True)
 			if autoflag:
-				subprocess.call("mv {0}/*.stats {0}/*.pdf {0}/*.tab {0}/flagging".format(t), shell=True)
+				subprocess.call("mv {0}/*.stats {0}/*.pdf {0}/*.tab {0}/flagging > /dev/null 2>&1".format(t), shell=True)
 		subprocess.call(["rm","-r","sky.calibrator","sky.dummy"])
 		if postcorrupt==0:
 			subprocess.call(["rm","post_ndppp_corrupt_report.txt"])
