@@ -12,7 +12,7 @@
 #---Version 2.0.1---
 #Fixed LBA Phase-only bug
 
-import subprocess, multiprocessing, os, glob, optparse, sys, datetime, string, getpass, time, logging, ConfigParser
+import subprocess, multiprocessing, os, glob, optparse, sys, datetime, string, getpass, time, logging, ConfigParser, base64
 from functools import partial
 from multiprocessing import Pool
 import pyrap.tables as pt
@@ -35,8 +35,6 @@ if curr_env["LOFARROOT"] in rsmshared.correct_lofarroot:
 	chosen_environ=rsmshared.correct_lofarroot[curr_env["LOFARROOT"]]
 else:
 	chosen_environ=curr_env["LOFARROOT"].split("/")[-2]
-	
-print "Running on {0} version of lofar software".format(chosen_environ)
 
 config_file="rsmpp_lba.parset"
 
@@ -786,7 +784,7 @@ else:
 				os.chdir(i)
 				os.mkdir("images")
 				subprocess.call("mv *.fits images", shell=True)
-				subprocess.call("mv *.model *.residual *.psf *.restored *.img0.avgpb *.img0.spheroid_cut* *.corr images", shell=True)
+				subprocess.call("mv *.model *.residual *.psf *.restored *.avgpb *.img0.spheroid_cut* *.corr images", shell=True)
 				os.chdir("..")
 			log.info("Creating averaged images...")
 			average_band_images_multi=partial(rsmshared.average_band_images, beams=beams)
@@ -796,6 +794,10 @@ else:
 				create_mosaic_multi=partial(rsmshared.create_mosaic, band_nums=rsm_band_numbers, chosen_environ=chosen_environ, pad=userpad, avgpbr=avpbrad)
 				pool=Pool(processes=len(rsm_band_numbers))
 				pool.map(create_mosaic_multi, target_obs)
+				for i in target_obs:
+					os.chdir(i)
+					subprocess.call("mv *mosaic* images/mosaics/", shell=True)
+					os.chdir("..")
 	
 		#----------------------------------------------------------------------------------------------------------------------------------------------
 		#																End of Process
