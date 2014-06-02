@@ -195,6 +195,7 @@ log.addHandler(textlog)
 log.info("Run started at {0} UTC".format(date_time_start))
 log.info("rsmpp_lba.py Version {0}".format(vers))
 log.info("Running on {0} lofar software".format(chosen_environ))
+log.info("User: {0} - email set to {1}".format(user, mail))
 
 #Set options to variables just to make life a bit easier
 precal=options.precalib
@@ -821,7 +822,7 @@ else:
 		# os.mkdir("FINAL_DATASETS")
 		# subprocess.call("mv SAP00*BAND*_FINAL.MS FINAL_COMB_DATASETS", shell=True)
 		for c in target_obs:
-			subprocess.call("mv {0}/*amp.pdf {0}/*phs.pdf {0}/*.stats {0}/*.tab {0}/flagging".format(c), shell=True)
+			subprocess.call("mv {0}/*amp.pdf {0}/*phs.pdf {0}/*.stats {0}/*.tab {0}/flagging > /dev/null 2>&1".format(c), shell=True)
 			subprocess.call("mv {0}/*.pdf {0}/plots".format(c), shell=True)
 			if not precal:
 				subprocess.call("mv {0}/*.tmp* {0}/calibrators".format(c), shell=True)

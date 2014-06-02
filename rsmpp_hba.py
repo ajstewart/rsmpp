@@ -203,6 +203,7 @@ log.addHandler(textlog)
 log.info("Run started at {0} UTC".format(date_time_start))
 log.info("rsmpp.py Version {0}".format(vers))
 log.info("Running on {0} lofar software".format(chosen_environ))
+log.info("User: {0} - email set to {1}".format(user, mail))
 
 #----------------------------------------------------------------------------------------------------------------------------------------------
 #																Options Assignment to variables
@@ -882,7 +883,7 @@ Script now exiting...".format(i, data_dir))
 		for t in target_obs:
 			subprocess.call("mv {0}/*_uv.MS.dppp {0}/datasets".format(t), shell=True)
 			if autoflag:
-				subprocess.call("mv {0}/*.stats {0}/*.pdf {0}/*.tab {0}/flagging".format(t), shell=True)
+				subprocess.call("mv {0}/*.stats {0}/*.pdf {0}/*.tab {0}/flagging > /dev/null 2>&1".format(t), shell=True)
 		subprocess.call(["rm","-r","sky.calibrator","sky.dummy"])
 		if postcorrupt==0:
 			subprocess.call(["rm","post_ndppp_corrupt_report.txt"])
