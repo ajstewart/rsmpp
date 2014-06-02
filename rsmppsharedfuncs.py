@@ -119,7 +119,7 @@ def rficonsole(ms,mode, obsid):
 	else:
 		strategy=tools["HBAdefault"]
 	log.info("Running rficonsole on {0}...".format(ms))
-	subprocess.call("rficonsole -j 1 -strategy {0} -column CORRECTED_DATA -indirect-read {1} > {2}/logs/rficonsole.{3}.log 2>&1".format(strategy, ms, obsid, ms.split("/")[-1])
+	subprocess.call("rficonsole -j 1 -strategy {0} -column CORRECTED_DATA -indirect-read {1} > {2}/logs/rficonsole.{3}.log 2>&1".format(strategy, ms, obsid, ms.split("/")[-1]), shell=True)
 
 def check_dataset(ms):
 	check=pt.table(ms, ack=False)
