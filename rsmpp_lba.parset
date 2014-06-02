@@ -20,6 +20,7 @@ calibratorbeam=1
 remaindersubbands=4
 
 [PROCESSING]
+rficonsole=off
 autoflag=on
 postcut=0
 PHASEONLY=off

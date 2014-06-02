@@ -104,6 +104,7 @@ group.add_option("--precalibrated", action="store_true", dest="precalib", defaul
 group.add_option("--precalibratedloc", action="store", type="choice", choices=['DATA', 'CORRECTED_DATA',], dest="precalibloc", default=config.get("DATA", "precalibratedloc"), help="Define whether the calibrated data is located in the DATA or CORRECTED_DATA column [default: %default]")
 parser.add_option_group(group)
 group = optparse.OptionGroup(parser, "Processing Options")
+group.add_option("--rficonsole", action="store_true", dest="rfi", default=config.getboolean("PROCESSING", "rficonsole"),help="Use this option to run rficonsole before phase-only calibration [default: %default]")
 group.add_option("-f", "--flag", action="store_true", dest="autoflag", default=config.getboolean("PROCESSING", "autoflag"),help="Use this option to use autoflagging in processing [default: %default]")
 group.add_option("-t", "--postcut", action="store", type="int", dest="postcut", default=config.getint("PROCESSING", "postcut"),help="Use this option to enable post-bbs flagging, specifying the cut level [default: %default]")
 group.add_option("-P", "--PHASEONLY", action="store_true", dest="PHASEONLY", default=config.getboolean("PROCESSING", "PHASEONLY"),help="Choose just to perform only a phase only calibration on an already EXISTING rsmpp output [default: %default]")
@@ -245,6 +246,8 @@ destroy=options.destroy	#lightweight mode on or off
 bandsno=options.bandsno	#number of bands there should be
 subsinbands=options.subsinbands	#number of sub bands to combine to make a band
 toprocess=options.obsids	#toprocess variable - what ID's to run
+rfi=options.rfi
+mode="UNKNOWN"
 #Now gather the ids that will be run, either from a file or if not a text input.
 if toprocess!="to_process.py":
 	if "," in toprocess:
@@ -689,6 +692,13 @@ Script now exiting...".format(i, data_dir))
 					temp=pt.table("{0}/SPECTRAL_WINDOW".format(targets[i][beamc][0]), ack=False)
 					nchans=int(temp.col("NUM_CHAN")[0])
 					log.info("Number of channels in a sub band: {0}".format(nchans))
+					if mode=="UNKNOWN":
+						msfreq=show_freq = ft.getcell('REF_FREQUENCY',0)
+						if int(msfreq)/1e6 < 100:
+							mode="LBA"
+						else:
+							mode="HBA"
+						log.info("Data observing mode: {0}".format(mode))
 					temp.close()
 				if not os.path.isfile("post_ndppp_corrupt_report.txt"):
 					corrupt_report=open("post_ndppp_corrupt_report.txt", 'w')
@@ -719,7 +729,8 @@ Script now exiting...".format(i, data_dir))
 			# calibrate step 1 process
 			if not precal:
 				log.info("Calibrating calibrators and transferring solutions for {0} and {1}...".format(i, j))
-				calibrate_msss1_multi=partial(rsmhbaf.calibrate_msss1, beams=beams, diff=diff, calparset=calparset, calmodel=calmodel, correctparset=correctparset, dummy=dummy, oddeven=target_oddeven, firstid=firstid_oe)
+				calibrate_msss1_multi=partial(rsmhbaf.calibrate_msss1, beams=beams, diff=diff, calparset=calparset, 
+				calmodel=calmodel, correctparset=correctparset, dummy=dummy, oddeven=target_oddeven, firstid=firstid_oe, mode=mode, rfi=rfi)
 				if __name__ == '__main__':
 					worker_pool.map(calibrate_msss1_multi, calibs[j])
 			else:

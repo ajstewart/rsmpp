@@ -21,6 +21,8 @@ tools={"editparmdb":os.path.join(rootpath, "tools", "edit_parmdb", "edit_parmdb.
 "mosaic":os.path.join(rootpath, "tools", "mosaic", "mos.py"),
 "ascii":os.path.join(rootpath, "tools", "plotting", "asciistats.py"),
 "stats":os.path.join(rootpath, "tools", "plotting", "statsplot.py"),
+"HBAdefault":os.path.join(rootpath, "tools", "HBAdefault"),
+"LBAdefault":os.path.join(rootpath, "tools", "LBAdefault"),
 }
 
 log=logging.getLogger("rsm")
@@ -110,6 +112,14 @@ def NDPPP_Initial(SB, wk_dir, ndppp_base, prec, precloc):
 	log.info("Performing Initial NDPPP on {0}...".format(curr_SB))
 	subprocess.call("NDPPP {0} > {1}/logs/ndppp.{2}.log 2>&1".format(ndppp_filename, curr_obs, curr_SB), shell=True)
 	os.remove(ndppp_filename)
+	
+def rficonsole(ms,mode, obsid):
+	if mode=="LBA":
+		strategy=tools["LBAdefault"]
+	else:
+		strategy=tools["HBAdefault"]
+	log.info("Running rficonsole on {0}...".format(ms))
+	subprocess.call("rficonsole -j 1 -strategy {0} -column CORRECTED_DATA -indirect-read {1} > {2}/logs/rficonsole.{3}.log 2>&1".format(strategy, ms, obsid, ms.split("/")[-1])
 
 def check_dataset(ms):
 	check=pt.table(ms, ack=False)
