@@ -204,6 +204,7 @@ log.addHandler(textlog)
 log.info("Run started at {0} UTC".format(date_time_start))
 log.info("rsmpp.py Version {0}".format(vers))
 log.info("Running on {0} lofar software".format(chosen_environ))
+log.info("User: {0} - email set to {1}".format(user, mail))
 
 #----------------------------------------------------------------------------------------------------------------------------------------------
 #																Options Assignment to variables
