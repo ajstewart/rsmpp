@@ -649,7 +649,7 @@ else:
 					nchans=int(temp.col("NUM_CHAN")[0])
 					log.info("Number of channels in a sub band: {0}".format(nchans))
 					if mode=="UNKNOWN":
-						msfreq=show_freq = ft.getcell('REF_FREQUENCY',0)
+						msfreq=show_freq = temp.getcell('REF_FREQUENCY',0)
 						if int(msfreq)/1e6 < 100:
 							mode="LBA"
 						else:
