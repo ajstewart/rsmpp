@@ -56,3 +56,4 @@ maxbaseline=3.0
 mask=off
 mosaic=off
 avgpbrad=0.5
+ncpmode=off

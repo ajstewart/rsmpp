@@ -143,6 +143,7 @@ group.add_option("-L", "--maxbaseline", action="store", type="int", dest="maxbas
 group.add_option("-m", "--mask", action="store_true", dest="mask", default=config.getboolean("IMAGING", "mask"), help="Use option to NOT use a mask when cleaning [default: %default]")
 group.add_option("-M", "--mosaic", action="store_true", dest="mosaic", default=config.getboolean("IMAGING", "mosaic"),help="Use option to produce snapshot, band, mosaics after imaging [default: %default]")
 group.add_option("--avgpbradius", action="store", type="float", dest="avgpbrad", default=config.get("IMAGING", "avgpbrad"),help="Choose radius for which avgpbz.py trims the primary beam when mosaicing [default: %default]")
+group.add_option("--ncpmode", action="store_true", dest="ncp", default=config.get("IMAGING", "ncpmode"),help="Turn this option on when mosaicing the North Celestial Pole [default: %default]")
 parser.add_option_group(group)
 (options, args) = parser.parse_args()
 
@@ -247,6 +248,7 @@ bandsno=options.bandsno	#number of bands there should be
 subsinbands=options.subsinbands	#number of sub bands to combine to make a band
 toprocess=options.obsids	#toprocess variable - what ID's to run
 rfi=options.rfi
+ncp=options.ncp
 mode="UNKNOWN"
 #Now gather the ids that will be run, either from a file or if not a text input.
 if toprocess!="to_process.py":
@@ -852,13 +854,13 @@ Script now exiting...".format(i, data_dir))
 			if __name__=='__main__':
 				worker_pool.map(average_band_images_multi, target_obs)
 			if mosaic:
-				create_mosaic_multi=partial(rsmshared.create_mosaic, band_nums=rsm_band_numbers, chosen_environ=chosen_environ, pad=userpad, avgpbr=avpbrad)
+				create_mosaic_multi=partial(rsmshared.create_mosaic, band_nums=rsm_band_numbers, chosen_environ=chosen_environ, pad=userpad, avgpbr=avpbrad, ncp=ncp)
 				pool=Pool(processes=len(rsm_band_numbers))
 				pool.map(create_mosaic_multi, target_obs)
 				for i in target_obs:
-					os.chdir(i)
-					subprocess.call("mv *mosaic* images/mosaics/", shell=True)
-					os.chdir("..")
+					os.chdir(os.path.join(i, "images"))
+					subprocess.call("mv *mosaic* mosaics/", shell=True)
+					os.chdir("../..")
 				
 		#----------------------------------------------------------------------------------------------------------------------------------------------
 		#																End of Process
