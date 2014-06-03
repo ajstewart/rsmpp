@@ -693,10 +693,12 @@ else:
 					worker_pool.map(calibrate_msss1_multi, calibs[i])
 			else:
 				log.info("Data is precalibrated - calibrator calibration has been skipped")
-
+			if rfi:
+				torfi=sorted(glob.glob("*.MS.dppp"))
+				rficonsole_multi=partial(rsmshared.rficonsole, mode=mode, obsid=i)
+				worker_pool.map(rficonsole_multi, torfi)
 		log.info("Done!")
-		
-		
+			
 		#Combine the bands
 		log.info("Creating Bands for all sets...")
 		rsm_bandsndppp_multi=partial(rsmshared.rsm_bandsndppp, rsm_bands=rsm_bands)

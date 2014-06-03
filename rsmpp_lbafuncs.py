@@ -102,8 +102,6 @@ def calibrate_msss1(Calib, beams, diff, calparset, calmodel, correctparset, dumm
 		target_name=target.split('/')[-1]
 		log.info("Transferring calibrator solutions to {0}...".format(target_name))
 		subprocess.call("calibrate-stand-alone --sourcedb sky.dummy --parmdb {0}/instrument {1} {2} {3} > logs/calibrate_transfer_{4}.txt 2>&1".format(Calib, target, correctparset, dummy, target_name), shell=True)
-		if rfi:
-			rsmshared.rficonsole(target, mode, curr_obs)
 		rsmshared.shiftndppp(target, curr_obs, target_name)
 
 

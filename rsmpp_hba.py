@@ -737,6 +737,10 @@ Script now exiting...".format(i, data_dir))
 					worker_pool.map(calibrate_msss1_multi, calibs[j])
 			else:
 				log.info("Data is precalibrated - calibrator calibration has been skipped")
+			if rfi:
+				torfi=sorted(glob.glob("*.MS.dppp"))
+				rficonsole_multi=partial(rsmshared.rficonsole, mode=mode, obsid=i)
+				worker_pool.map(rficonsole_multi, torfi)
 		
 		log.info("Done!")
 		#Combine the bands
