@@ -9,7 +9,7 @@
 
 #Written by Adam Stewart, Last Update June 2014
 
-#---Version 2.0.1---
+#---Version 2.0.2---
 #Fixed LBA Phase-only bug
 
 import subprocess, multiprocessing, os, glob, optparse, sys, datetime, string, getpass, time, logging, ConfigParser, base64
@@ -19,7 +19,7 @@ import pyrap.tables as pt
 from itertools import izip
 import numpy as np
 import emailslofar as em
-vers="2.0.1"
+vers="2.0.2"
 
 #import functions file
 import rsmpp_lbafuncs as rsmlbaf
