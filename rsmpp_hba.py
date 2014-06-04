@@ -117,7 +117,7 @@ group.add_option("-g", "--corparset", action="store", type="string", dest="corpa
 group.add_option("-z", "--phaseparset", action="store", type="string", dest="phaseparset", default=config.get("PARSETS", "phaseparset"),help="Specify bbs parset to use on phase only calibration of target [default: %default]")
 parser.add_option_group(group)
 group = optparse.OptionGroup(parser, "Skymodel Options:")
-group.add_option("-e", "--calmodel", action="store", type="string", dest="calmodel", default="AUTO",help="Specify a calibrator skymodel. By default the calibrator will be \
+group.add_option("-e", "--calmodel", action="store", type="string", dest="calmodel", default=default=config.get("SKYMODELS", "calmodel"),help="Specify a calibrator skymodel. By default the calibrator will be \
 detected and the respective model will be automatically fetched [default: %default]")
 group.add_option("-s", "--targetmodel", action="store", type="string", dest="skymodel", default=config.get("SKYMODELS", "targetmodel"),help="Specify a particular field skymodel to use for the phase only calibration, by default the skymodels will be\
 automatically generated.[default: %default]")
@@ -328,7 +328,7 @@ if calmodel=="AUTO":
 else:
 	if not os.path.isfile(calmodel):
 		log.error("Cannot locate {0}, please check your calmodel file is present\n\
-If you would like to automatically fetch the calibrator skymodel do not use the -s option.\nScript now exiting...".format(skymodel))
+If you would like to automatically fetch the calibrator skymodel do not use the -s option.\nScript now exiting...".format(calmodel))
 		sys.exit()
 	else:
 		create_cal=False	
