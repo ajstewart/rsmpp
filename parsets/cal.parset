@@ -1,5 +1,5 @@
 Strategy.InputColumn = DATA
-Strategy.ChunkSize = 0
+Strategy.ChunkSize = 120
 Strategy.Baselines = [CR]S*&
 Strategy.UseSolver = F
 Strategy.Correlations = []

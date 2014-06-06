@@ -1,9 +1,0 @@
-gridmode='widefield'
-wprojplanes=128
-niter=500
-threshold='0.0mJy'
-imsize=[1024,1024]
-cell=['60.0arcsec']
-weighting='briggs'
-robust=0.0
-calready=False
