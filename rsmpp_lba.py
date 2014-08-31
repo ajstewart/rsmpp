@@ -693,11 +693,6 @@ else:
 					worker_pool.map(calibrate_msss1_multi, calibs[i])
 			else:
 				log.info("Data is precalibrated - calibrator calibration has been skipped")
-			if rfi:
-				log.info("Starting flagging processes with rficonsole...")
-				torfi=sorted(glob.glob(os.path.join(i,"*.MS.dppp")))
-				rficonsole_multi=partial(rsmshared.rficonsole, mode=mode, obsid=i)
-				worker_pool.map(rficonsole_multi, torfi)
 		log.info("Done!")
 			
 		#Combine the bands
@@ -715,6 +710,11 @@ else:
 			worker_pool.map(calibrate_msss2_multi, tocalibrate)
 		proc_target_obs=sorted(glob.glob("L*/L*_SAP00?_BAND*.MS.dppp"))
 		log.info("Done!")
+        
+		if rfi:
+			log.info("Starting flagging processes with rficonsole...")
+			rficonsole_multi=partial(rsmshared.rficonsole, mode=mode, obsid=i)
+			worker_pool.map(rficonsole_multi, proc_target_obs)
 
 		if peeling:
 			log.info("Peeling process started on all sets...")
