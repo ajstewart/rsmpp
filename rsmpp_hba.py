@@ -82,7 +82,7 @@ For full details on how to run the script, see the user manual here: https://doc
 parser = optparse.OptionParser(usage=usage,version="%prog v{0}".format(vers), description=description)
 #define all the options for optparse
 group = optparse.OptionGroup(parser, "General Options")
-group.add_option("--nice", action="store", type="int", dest="nice", default=config.getint("GENERAL", "nice"), help="Set nice level for processing [default: %default]")
+group.add_option("--nice", action="store", type="int", dest="nice", default=config.getboolean("GENERAL", "nice"), help="Set nice level for processing [default: %default]")
 group.add_option("--loglevel", action="store", type="string", dest="loglevel", default=config.get("GENERAL", "loglevel"),help="Use this option to set the print out log level ['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG'] [default: %default]")
 group.add_option("-D", "--lightweight", action="store_true", dest="destroy", default=config.getboolean("GENERAL", "lightweight"),help="Use this option to delete all the output except images, logs and plots [default: %default]")
 group.add_option("-n", "--ncores", action="store", type="int", dest="ncores", default=config.getint("GENERAL", "ncores"), help="Specify the number of observations to process simultaneously (i.e. the number of cores to use)[default: %default]")

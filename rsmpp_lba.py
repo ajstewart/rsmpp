@@ -83,7 +83,7 @@ group.add_option("-o", "--output", action="store", type="string", dest="newdir",
 group.add_option("-w", "--overwrite", action="store_true", dest="overwrite", default=config.getboolean("GENERAL", "overwrite"),help="Use this option to overwrite output directory if it already exists [default: %default]")
 parser.add_option_group(group)
 group = optparse.OptionGroup(parser, "LTA Options")
-group.add_option("--LTAfetch", action="store_true", dest="lta", default=config.getint("LTA", "LTAfetch"), help="Turn on or off LTA data fetching [default: %default]")
+group.add_option("--LTAfetch", action="store_true", dest="lta", default=config.getboolean("LTA", "LTAfetch"), help="Turn on or off LTA data fetching [default: %default]")
 group.add_option("--method", action="store", type="choice", choices=["html","srm"], dest="ltameth", default=config.get("LTA", "method"),help="Select to use 'html' or 'srm' for data transfer [default: %default]")
 group.add_option("--htmlfile", action="store", type="string", dest="htmlfile", default=config.get("LTA", "htmlfile"),help="LTA html.txt file with wget addresses [default: %default]")
 group.add_option("--n_simult_dwnlds", action="store", type="int", dest="ltacores", default=config.getint("LTA", "n_simult_dwnlds"), help="Specify the number of simultaneous downloads [default: %default]")
