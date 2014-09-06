@@ -260,12 +260,12 @@ ncp=options.ncp
 mode="UNKNOWN"
 if toprocess!="to_process.py":
 	if "," in toprocess:
-		toprocess_list=sorted(toprocess.split(","))
+		to_process=sorted(toprocess.split(","))
 	elif "-" in toprocess:
 		tempsplit=sorted(toprocess.split("-"))
-		toprocess_list=["L{0}".format(i) for i in range(int(tempsplit[0].split("L")[-1]),int(tempsplit[1].split("L")[-1])+1)]
+		to_process=["L{0}".format(i) for i in range(int(tempsplit[0].split("L")[-1]),int(tempsplit[1].split("L")[-1])+1)]
 	else:
-		toprocess_list=sorted(toprocess.split())
+		to_process=sorted(toprocess.split())
 		
 #get the beams
 beams=[int(i) for i in options.beams.split(',')]
@@ -490,6 +490,15 @@ else:
 	subprocess.call(["cp",os.path.join("..", config_file), config_file+"_used"])
 	if lta:
 		subprocess.call(["cp","-r","{0}".format(os.path.join("..", html)), "."])
+	#Gets the to_process list and assigns it to target_obs
+	log.info("Collecting observations to process...")
+
+	if toprocess=="to_process.py":
+		from to_process import to_process
+		target_obs=to_process
+		target_obs.sort()
+	else:
+		target_obs=to_process
 	
 	#----------------------------------------------------------------------------------------------------------------------------------------------
 	#																			LTA Fetch
@@ -498,12 +507,11 @@ else:
 	if lta:
 		log.info("LTA data fetch starting...")
 		#Set up LTA specific workers for downloading
-		lta_workers=Pool(processes=ltacores)
 		#Fetch the html file to be used
 		subprocess.call(["cp","-r",html, data_dir])
 		#Switch to data_dir, read in html file and start downloading
 		os.chdir(data_dir)
-		print os.getcwd()
+		lta_workers=Pool(processes=ltacores)
 		html_temp=open(html, 'r')
 		initfetch=[htmlline.rstrip('\n') for htmlline in html_temp]
 		html_temp.close()
@@ -516,7 +524,7 @@ else:
 		#Start the checking for missing files
 		log.info("Checking for missing files...")
 		for attempt in range(missattempts):
-			log.info("----------------------------------------------------------------------------------------")
+			# log.info("----------------------------------------------------------------------------------------")
 			log.info("Running Missing File Check {0} of {1}".format(attempt+1, missattempts))
 			#Files downloaded should match those in the html file with a few changes
 			if ltameth=="html":
@@ -601,16 +609,6 @@ else:
 	#																Load in User List and Check Data Presence
 	#----------------------------------------------------------------------------------------------------------------------------------------------
 	try:
-		#Gets the to_process list and assigns it to target_obs
-		log.info("Collecting observations to process...")
-
-		if toprocess=="to_process.py":
-			from to_process import to_process
-			target_obs=to_process
-			target_obs.sort()
-		else:
-			target_obs=toprocess_list
-
 		#The following passage just checks that all the data is present where it should be.
 		log.info("Observations to be processed:")
 		for i in target_obs:
