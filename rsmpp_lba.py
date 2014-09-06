@@ -565,9 +565,9 @@ else:
 			for lta_id in uniq_ltaobsids:
 				#Check if directory already exists
 				if os.path.isdir(lta_id):
-					log.critical("Obs ID directory already exists in data directory - will not overwrite or move files.".)
-					log.critical("Please check and organise the downloaded data - rsmpp-rename.py can help with this.".)
-					log.critical("Once done the pipeline can be re-ran with LTA mode off, just point to the data directory.".)
+					log.critical("Obs ID directory already exists in data directory - will not overwrite or move files.")
+					log.critical("Please check and organise the downloaded data - rsmpp-rename.py can help with this.")
+					log.critical("Once done the pipeline can be re-ran with LTA mode off, just point to the data directory.")
 					sys.exit()
 				else:	
 					os.mkdir(lta_id)
