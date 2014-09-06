@@ -21,6 +21,8 @@ tools={"editparmdb":os.path.join(rootpath, "tools", "edit_parmdb", "edit_parmdb.
 "mosaic":os.path.join(rootpath, "tools", "mosaic", "mos.py"),
 "ascii":os.path.join(rootpath, "tools", "plotting", "asciistats.py"),
 "stats":os.path.join(rootpath, "tools", "plotting", "statsplot.py"),
+"HBAdefault":os.path.join(rootpath, "tools", "HBAdefault"),
+"LBAdefault":os.path.join(rootpath, "tools", "LBAdefault"),
 }
 
 log=logging.getLogger("rsm")
@@ -140,6 +142,14 @@ def NDPPP_Initial(SB, wk_dir, ndppp_base, prec, precloc):
 	log.info("Performing Initial NDPPP on {0}...".format(curr_SB))
 	subprocess.call("NDPPP {0} > {1}/logs/ndppp.{2}.log 2>&1".format(ndppp_filename, curr_obs, curr_SB), shell=True)
 	os.remove(ndppp_filename)
+	
+def rficonsole(ms,mode, obsid):
+	if mode=="LBA":
+		strategy=tools["LBAdefault"]
+	else:
+		strategy=tools["HBAdefault"]
+	log.info("Running rficonsole on {0}...".format(ms))
+	subprocess.call("rficonsole -j 1 -strategy {0} {1} > {2}/logs/rficonsole.{3}.log 2>&1".format(strategy, ms, obsid, ms.split("/")[-1]), shell=True)
 
 def check_dataset(ms):
 	check=pt.table(ms, ack=False)
@@ -529,7 +539,7 @@ def average_band_images(snap, beams):
 		log.info("Averaging {0} SAP00{1}...".format(snap, b))
 		subprocess.call("{0} {1}/images/{1}_SAP00{2}_AVG {1}/images/{1}_SAP00{2}_BAND0?.MS.dppp.img.fits > {1}/logs/average_SAP00{2}_log.txt 2>&1".format(tools["average"], snap, b), shell=True)
 	
-def create_mosaic(snap, band_nums, chosen_environ, pad, avgpbr):
+def create_mosaic(snap, band_nums, chosen_environ, pad, avgpbr, ncp):
 	for b in band_nums:
 		tocorrect=sorted(glob.glob(os.path.join(snap, "images","L*_SAP00?_BAND0{0}.MS.dppp.img_mosaic0.avgpb".format(b))))
 		for w in tocorrect:
@@ -558,6 +568,9 @@ def create_mosaic(snap, band_nums, chosen_environ, pad, avgpbr):
 		m_list=[i.split("/")[0]+"/images/"+i.split("/")[-1]+".img_mosaic" for i in tomosaic]
 		m_name=os.path.join(snap, "images", "mosaics", "{0}_BAND0{1}_mosaic.fits".format(snap, b))
 		m_sens_name=os.path.join(snap, "images", "mosaics", "{0}_BAND0{1}_mosaic_sens.fits".format(snap, b))
-		subprocess.call("python {0} -o {1} -a avgpbz -s {2} {3} > {4}/logs/mosaic_band0{5}_log.txt 2>&1".format(tools["mosaic"], m_name, m_sens_name, ",".join(m_list), snap, b), shell=True)
+		if ncp:
+			subprocess.call("python {0} -o {1} -N -a avgpbz -s {2} {3} > {4}/logs/mosaic_band0{5}_log.txt 2>&1".format(tools["mosaic"], m_name, m_sens_name, ",".join(m_list), snap, b), shell=True)
+		else:
+			subprocess.call("python {0} -o {1} -a avgpbz -s {2} {3} > {4}/logs/mosaic_band0{5}_log.txt 2>&1".format(tools["mosaic"], m_name, m_sens_name, ",".join(m_list), snap, b), shell=True)
 
 correct_lofarroot={'/opt/share/lofar-archive/2013-06-20-19-15/LOFAR_r23543_10c8b37':'rsm-mainline', '/opt/share/lofar/2013-09-30-16-27/LOFAR_r26772_1374418':'lofar-sept2013', '/opt/share/lofar/2014-01-22-15-21/LOFAR_r28003_357357b':'lofar-jan2014'}

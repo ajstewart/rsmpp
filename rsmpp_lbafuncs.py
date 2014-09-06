@@ -77,7 +77,7 @@ def check_targets(i, beam, targets, targets_corrupt, rsm_bands, rsm_band_numbers
 		rsm_bands_lens[k]=len(rsm_bands[k])
 	return localmiss
 
-def calibrate_msss1(Calib, beams, diff, calparset, calmodel, correctparset, dummy, calibbeam):
+def calibrate_msss1(Calib, beams, diff, calparset, calmodel, correctparset, dummy, calibbeam, mode):
 	"""
 	Function that performs the full calibrator calibration and transfer of solutions for HBA and LBA. Performs \
 	the calibration and then shifts the corrected data over to a new data column.

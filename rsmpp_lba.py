@@ -7,11 +7,11 @@
 #A full user guide can be found on google docs here:
 # https://docs.google.com/document/d/1aqUxesq4I02i1mKJw_XHjLy0smCbL37uhtBpNf9rs9w
 
-#Written by Adam Stewart, Last Update May 2014
+#Written by Adam Stewart, Last Update June 2014
 
 #---Version 2.1.0---
 
-import subprocess, multiprocessing, os, glob, optparse, sys, datetime, string, getpass, time, logging, ConfigParser
+import subprocess, multiprocessing, os, glob, optparse, sys, datetime, string, getpass, time, logging, ConfigParser, base64
 from functools import partial
 from multiprocessing import Pool
 import pyrap.tables as pt
@@ -34,8 +34,6 @@ if curr_env["LOFARROOT"] in rsmshared.correct_lofarroot:
 	chosen_environ=rsmshared.correct_lofarroot[curr_env["LOFARROOT"]]
 else:
 	chosen_environ=curr_env["LOFARROOT"].split("/")[-2]
-	
-print "Running on {0} version of lofar software".format(chosen_environ)
 
 config_file="rsmpp_lba.parset"
 
@@ -108,6 +106,7 @@ group.add_option("-E", "--remaindersubbands", action="store", type=int, dest="re
 scheme chosen - they will be added to the last band [default: %default]")
 parser.add_option_group(group)
 group = optparse.OptionGroup(parser, "Processing Options")
+group.add_option("--rficonsole", action="store_true", dest="rfi", default=config.getboolean("PROCESSING", "rficonsole"),help="Use this option to run rficonsole before phase-only calibration [default: %default]")
 group.add_option("-f", "--flag", action="store_true", dest="autoflag", default=config.getboolean("PROCESSING", "autoflag"),help="Use this option to use autoflagging in processing [default: %default]")
 group.add_option("-t", "--postcut", action="store", type="int", dest="postcut", default=config.getint("PROCESSING", "postcut"),help="Use this option to enable post-bbs flagging, specifying the cut level [default: %default]")
 group.add_option("-P", "--PHASEONLY", action="store_true", dest="PHASEONLY", default=config.getboolean("PROCESSING", "PHASEONLY"),help="Choose just to perform only a phase only calibration on an already EXISTING rsmpp output [default: %default]")
@@ -147,6 +146,7 @@ group.add_option("-L", "--maxbaseline", action="store", type="int", dest="maxbas
 group.add_option("-m", "--mask", action="store_true", dest="mask", default=config.getboolean("IMAGING", "mask"), help="Use option to use a mask when cleaning [default: %default]")
 group.add_option("-M", "--mosaic", action="store_true", dest="mosaic", default=config.getboolean("IMAGING", "mosaic"),help="Use option to produce snapshot, band, mosaics after imaging [default: %default]")
 group.add_option("--avgpbradius", action="store", type="float", dest="avgpbrad", default=config.get("IMAGING", "avgpbrad"),help="Choose radius for which avgpbz.py trims the primary beam when mosaicing [default: %default]")
+group.add_option("--ncpmode", action="store_true", dest="ncp", default=config.get("IMAGING", "ncpmode"),help="Turn this option on when mosaicing the North Celestial Pole [default: %default]")
 parser.add_option_group(group)
 (options, args) = parser.parse_args()
 
@@ -255,6 +255,9 @@ ltadelay=options.delay	#delay between attempts
 ltadir=options.ltadir	#save data to directory
 ltacores=options.ltacores #number of downloads
 ltameth=options.ltameth #htmlorsrc
+rfi=options.rfi
+ncp=options.ncp
+mode="UNKNOWN"
 if toprocess!="to_process.py":
 	if "," in toprocess:
 		toprocess_list=sorted(toprocess.split(","))
@@ -434,7 +437,7 @@ if phaseO:
 						log.critical("{0} already exists! Use overwrite option or change output name.".format(newoutput))
 						sys.exit()
 				os.mkdir(newoutput)
-		tophase=sorted(glob.glob("L*/L*BAND{0}_*.dppp".format(phase_pattern)))
+		tophase=sorted(glob.glob("L*/L*BAND{0}*.dppp".format(phase_pattern)))
 		workers=Pool(processes=n)
 		standalone_phase_multi=partial(rsmshared.standalone_phase, phaseparset=phaseparset, flag=flag, toflag=toflag, autoflag=autoflag, create_sky=create_sky, skymodel=skymodel, phaseoutput=phase_name, phasecolumn=phase_col)
 		workers.map(standalone_phase_multi, tophase)
@@ -796,6 +799,13 @@ else:
 					temp=pt.table("{0}/SPECTRAL_WINDOW".format(targets[i][beamc][0]), ack=False)
 					nchans=int(temp.col("NUM_CHAN")[0])
 					log.info("Number of channels in a sub band: {0}".format(nchans))
+					if mode=="UNKNOWN":
+						msfreq=show_freq = temp.getcell('REF_FREQUENCY',0)
+						if int(msfreq)/1e6 < 100:
+							mode="LBA"
+						else:
+							mode="HBA"
+						log.info("Data observing mode: {0}".format(mode))
 					temp.close()
 				if not os.path.isfile("post_ndppp_corrupt_report.txt"):
 					corrupt_report=open("post_ndppp_corrupt_report.txt", 'w')
@@ -825,13 +835,14 @@ else:
 			# calibrate step 1 process
 			if not precal:
 				log.info("Calibrating calibrators and transfering solutions for {0}...".format(i))
-				calibrate_msss1_multi=partial(rsmlbaf.calibrate_msss1, beams=beams, diff=diff, calparset=calparset, calmodel=calmodel, correctparset=correctparset, dummy=dummy, calibbeam=calibbeam)
+				calibrate_msss1_multi=partial(rsmlbaf.calibrate_msss1, beams=beams, diff=diff, calparset=calparset, 
+				calmodel=calmodel, correctparset=correctparset, dummy=dummy, calibbeam=calibbeam, mode=mode)
 				if __name__ == '__main__':
 					worker_pool.map(calibrate_msss1_multi, calibs[i])
 			else:
 				log.info("Data is precalibrated - calibrator calibration has been skipped")
-
 		log.info("Done!")
+			
 		#Combine the bands
 		log.info("Creating Bands for all sets...")
 		rsm_bandsndppp_multi=partial(rsmshared.rsm_bandsndppp, rsm_bands=rsm_bands)
@@ -847,6 +858,11 @@ else:
 			worker_pool.map(calibrate_msss2_multi, tocalibrate)
 		proc_target_obs=sorted(glob.glob("L*/L*_SAP00?_BAND*.MS.dppp"))
 		log.info("Done!")
+        
+		if rfi:
+			log.info("Starting flagging processes with rficonsole...")
+			rficonsole_multi=partial(rsmshared.rficonsole, mode=mode, obsid=i)
+			worker_pool.map(rficonsole_multi, proc_target_obs)
 
 		if peeling:
 			log.info("Peeling process started on all sets...")
@@ -935,16 +951,20 @@ else:
 				os.chdir(i)
 				os.mkdir("images")
 				subprocess.call("mv *.fits images", shell=True)
-				subprocess.call("mv *.model *.residual *.psf *.restored *.img0.avgpb *.img0.spheroid_cut* *.corr images", shell=True)
+				subprocess.call("mv *.model *.residual *.psf *.restored *.avgpb *.img0.spheroid_cut* *.corr images", shell=True)
 				os.chdir("..")
 			log.info("Creating averaged images...")
 			average_band_images_multi=partial(rsmshared.average_band_images, beams=beams)
 			if __name__=='__main__':
 				worker_pool.map(average_band_images_multi, target_obs)
 			if mosaic:
-				create_mosaic_multi=partial(rsmshared.create_mosaic, band_nums=rsm_band_numbers, chosen_environ=chosen_environ, pad=userpad, avgpbr=avpbrad)
+				create_mosaic_multi=partial(rsmshared.create_mosaic, band_nums=rsm_band_numbers, chosen_environ=chosen_environ, pad=userpad, avgpbr=avpbrad, ncp=ncp)
 				pool=Pool(processes=len(rsm_band_numbers))
 				pool.map(create_mosaic_multi, target_obs)
+				for i in target_obs:
+					os.chdir(os.path.join(i, "images"))
+					subprocess.call("mv *mosaic* mosaics/", shell=True)
+					os.chdir("../..")
 	
 		#----------------------------------------------------------------------------------------------------------------------------------------------
 		#																End of Process
@@ -955,7 +975,7 @@ else:
 		# os.mkdir("FINAL_DATASETS")
 		# subprocess.call("mv SAP00*BAND*_FINAL.MS FINAL_COMB_DATASETS", shell=True)
 		for c in target_obs:
-			subprocess.call("mv {0}/*amp.pdf {0}/*phs.pdf {0}/*.stats {0}/*.tab {0}/flagging".format(c), shell=True)
+			subprocess.call("mv {0}/*amp.pdf {0}/*phs.pdf {0}/*.stats {0}/*.tab {0}/flagging > /dev/null 2>&1".format(c), shell=True)
 			subprocess.call("mv {0}/*.pdf {0}/plots".format(c), shell=True)
 			if not precal:
 				subprocess.call("mv {0}/*.tmp* {0}/calibrators".format(c), shell=True)

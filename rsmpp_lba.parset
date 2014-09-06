@@ -10,6 +10,7 @@ overwrite=on
 
 [LTA]
 LTAfetch=off
+method=html
 htmlfile=html.txt
 n_simult_dwnlds=6
 missing_attempts=10
@@ -28,6 +29,7 @@ calibratorbeam=1
 remaindersubbands=4
 
 [PROCESSING]
+rficonsole=off
 autoflag=on
 postcut=0
 PHASEONLY=off
@@ -64,3 +66,4 @@ maxbaseline=3.0
 mask=off
 mosaic=off
 avgpbrad=0.5
+ncpmode=off
