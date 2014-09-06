@@ -507,7 +507,7 @@ else:
 		subprocess.call(["cp","-r",html, data_dir])
 		#Switch to data_dir, read in html file and start downloading
 		os.chdir(data_dir)
-		html_temp=open(file, 'r')
+		html_temp=open(html, 'r')
 		initfetch=[htmlline.rstrip('\n') for htmlline in html_temp]
 		html_temp.close()
 		log.info("Fetching Files...")
