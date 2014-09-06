@@ -38,6 +38,11 @@ def fetch(file):
 	"""Simple wget get line"""
 	log.info("Fetching {0}...".format(file.split("/")[-1]))
 	subprocess.call("wget {0} > /dev/null 2>&1".format(file), shell=True)
+
+def fetchgrid(file):
+	"""Simple wget get line"""
+	log.info("Fetching {0}...".format(file.split("/")[-1]))
+	subprocess.call("srmcp {0} > /dev/null 2>&1".format(file), shell=True)
 	
 def untar(file):
 	"""Simple wget get line"""

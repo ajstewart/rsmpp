@@ -86,6 +86,7 @@ group.add_option("-w", "--overwrite", action="store_true", dest="overwrite", def
 parser.add_option_group(group)
 group = optparse.OptionGroup(parser, "LTA Options")
 group.add_option("--LTAfetch", action="store_true", dest="lta", default=config.getint("LTA", "LTAfetch"), help="Turn on or off LTA data fetching [default: %default]")
+group.add_option("--method", action="store", type="choice", choices=["html","srm"], dest="ltameth", default=config.get("LTA", "method"),help="Select to use 'html' or 'srm' for data transfer [default: %default]")
 group.add_option("--htmlfile", action="store", type="string", dest="htmlfile", default=config.get("LTA", "htmlfile"),help="LTA html.txt file with wget addresses [default: %default]")
 group.add_option("--n_simult_dwnlds", action="store", type="int", dest="ltacores", default=config.getint("LTA", "n_simult_dwnlds"), help="Specify the number of simultaneous downloads [default: %default]")
 group.add_option("--missing_attempts", action="store", type="int", dest="missattempts", default=config.getboolean("LTA", "missing_attempts"),help="How many attempts will be made to retrive failed downloads (i.e. missing files from the html file) [default: %default]")
@@ -253,6 +254,7 @@ missattempts=options.missattempts	#lta missing attempts
 ltadelay=options.delay	#delay between attempts
 ltadir=options.ltadir	#save data to directory
 ltacores=options.ltacores #number of downloads
+ltameth=options.ltameth #htmlorsrc
 if toprocess!="to_process.py":
 	if "," in toprocess:
 		toprocess_list=sorted(toprocess.split(","))
@@ -347,12 +349,13 @@ If you would like to automatically fetch the calibrator skymodel set the calmode
 
 #LTA checks
 if lta:
-	userhome=os.path.expanduser("~")
-	wgetfile=os.path.join(userhome, ".wgetrc")
-	if not os.path.isfile(wgetfile):
-		log.critical("No '.wgetrc' file detected in home directory - LTA wget will fail.")
-		log.critical("Please set up and try again.")
-		sys.exit()
+    if ltameth=="html":
+    	userhome=os.path.expanduser("~")
+    	wgetfile=os.path.join(userhome, ".wgetrc")
+    	if not os.path.isfile(wgetfile):
+    		log.critical("No '.wgetrc' file detected in home directory - LTA wget will fail.")
+    		log.critical("Please set up and try again.")
+    		sys.exit()
 	if not os.path.isfile(html):
 		log.critical("Cannot locate {0}, please check file is present\nScript now exiting...".format(ndppp_parset))
 		sys.exit()	
@@ -501,7 +504,10 @@ else:
 		initfetch=[htmlline.rstrip('\n') for htmlline in html_temp]
 		html_temp.close()
 		log.info("Fetching Files...")
-		lta_workers.map(rsmshared.fetch, initfetch)
+        if ltameth=="html":
+    		lta_workers.map(rsmshared.fetch, initfetch)
+        else:
+            lta_workers.map(rsmshared.fetchgrid, initfetch)
 		log.info("Initial fetch complete!")
 		#Start the checking for missing files
 		log.info("Checking for missing files...")
@@ -509,7 +515,10 @@ else:
 			log.info("----------------------------------------------------------------------------------------")
 			log.info("Running Missing File Check {0} of {1}".format(attempt+1, missattempts))
 			#Files downloaded should match those in the html file with a few changes
-			tofetch=[k for k in initfetch if not os.path.isfile(k.split('lofigrid/')[-1].replace('/', '%2F'))]
+            if ltameth=="html":
+    			tofetch=[k for k in initfetch if not os.path.isfile('SRMFifoGet'+k.split('SRMFifoGet')[-1].replace('/', '%2F'))]
+            else:
+                tofetch=[k for k in initfetch if not os.path.isfile(k.split('file:///')[-1])]
 			if len(tofetch) < 1:
 				log.info("0 files remain to fetch")
 				#if no more missing then break the for loop
@@ -523,7 +532,10 @@ else:
 				log.info("----------------------------------------")
 				log.info("Waiting {0} seconds before attempting to fetch missing files...")
 				time.sleep(ltadelay)
-				lta_workers.map(rsmshared.fetch, tofetch)
+                if ltameth=="html":
+    				lta_workers.map(rsmshared.fetch, tofetch)
+                else:
+                    lta_workers.map(rsmshared.fetchgrid, tofetch)
 				
 		log.info("LTA fetch complete!")
 		#Need to prepare data for pipeline: untar -> rename -> organise into dirs
