@@ -500,47 +500,47 @@ else:
 	#----------------------------------------------------------------------------------------------------------------------------------------------
 
 	if lta:
-		log.info("LTA data fetch starting...")
-		#Set up LTA specific workers for downloading
-		lta_workers=Pool(processes=ltacores)
-		#Fetch the html file to be used
-		subprocess.call(["cp","-r",html, data_dir])
-		#Switch to data_dir, read in html file and start downloading
-		os.chdir(data_dir)
-		html_temp=open(file, 'r')
-		initfetch=[htmlline.rstrip('\n') for htmlline in html_temp]
-		html_temp.close()
-		log.info("Fetching Files...")
+        log.info("LTA data fetch starting...")
+        #Set up LTA specific workers for downloading
+        lta_workers=Pool(processes=ltacores)
+        #Fetch the html file to be used
+        subprocess.call(["cp","-r",html, data_dir])
+        #Switch to data_dir, read in html file and start downloading
+        os.chdir(data_dir)
+        html_temp=open(file, 'r')
+        initfetch=[htmlline.rstrip('\n') for htmlline in html_temp]
+        html_temp.close()
+        log.info("Fetching Files...")
         if ltameth=="html":
-    		lta_workers.map(rsmshared.fetch, initfetch)
+            lta_workers.map(rsmshared.fetch, initfetch)
         else:
             lta_workers.map(rsmshared.fetchgrid, initfetch)
         log.info("Initial fetch complete!")
-		#Start the checking for missing files
-		log.info("Checking for missing files...")
-		for attempt in range(missattempts):
-			log.info("----------------------------------------------------------------------------------------")
-			log.info("Running Missing File Check {0} of {1}".format(attempt+1, missattempts))
-			#Files downloaded should match those in the html file with a few changes
+        #Start the checking for missing files
+        log.info("Checking for missing files...")
+        for attempt in range(missattempts):
+            log.info("----------------------------------------------------------------------------------------")
+            log.info("Running Missing File Check {0} of {1}".format(attempt+1, missattempts))
+            #Files downloaded should match those in the html file with a few changes
             if ltameth=="html":
-    			tofetch=[k for k in initfetch if not os.path.isfile('SRMFifoGet'+k.split('SRMFifoGet')[-1].replace('/', '%2F'))]
+                tofetch=[k for k in initfetch if not os.path.isfile('SRMFifoGet'+k.split('SRMFifoGet')[-1].replace('/', '%2F'))]
             else:
                 tofetch=[k for k in initfetch if not os.path.isfile(k.split('file:///')[-1])]
-			if len(tofetch) < 1:
-				log.info("0 files remain to fetch")
-				#if no more missing then break the for loop
-				break
-			else:
-				log.warning("{0} files remain to fetch:".format(len(tofetch)))
-				log.info("----------------------------------------")
-				#Print out missing files and proceed to attempt to fetch with delay
-				for ltafile in tofetch:
-					log.info(ltafile.split("/")[-1])
-				log.info("----------------------------------------")
-				log.info("Waiting {0} seconds before attempting to fetch missing files...")
-				time.sleep(ltadelay)
+            if len(tofetch) < 1:
+                log.info("0 files remain to fetch")
+                #if no more missing then break the for loop
+                break
+            else:
+                log.warning("{0} files remain to fetch:".format(len(tofetch)))
+                log.info("----------------------------------------")
+                #Print out missing files and proceed to attempt to fetch with delay
+                for ltafile in tofetch:
+                    log.info(ltafile.split("/")[-1])
+                log.info("----------------------------------------")
+                log.info("Waiting {0} seconds before attempting to fetch missing files...")
+                time.sleep(ltadelay)
                 if ltameth=="html":
-    				lta_workers.map(rsmshared.fetch, tofetch)
+                    lta_workers.map(rsmshared.fetch, tofetch)
                 else:
                     lta_workers.map(rsmshared.fetchgrid, tofetch)
 				
