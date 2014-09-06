@@ -94,7 +94,7 @@ group.add_option("--LTAfetch", action="store_true", dest="lta", default=config.g
 group.add_option("--method", action="store", type="choice", choices=["html","srm"], dest="ltameth", default=config.get("LTA", "method"),help="Select to use 'html' or 'srm' for data transfer [default: %default]")
 group.add_option("--htmlfile", action="store", type="string", dest="htmlfile", default=config.get("LTA", "htmlfile"),help="LTA html.txt file with wget addresses [default: %default]")
 group.add_option("--n_simult_dwnlds", action="store", type="int", dest="ltacores", default=config.getint("LTA", "n_simult_dwnlds"), help="Specify the number of simultaneous downloads [default: %default]")
-group.add_option("--missing_attempts", action="store", type="int", dest="missattempts", default=config.getboolean("LTA", "missing_attempts"),help="How many attempts will be made to retrive failed downloads (i.e. missing files from the html file) [default: %default]")
+group.add_option("--missing_attempts", action="store", type="int", dest="missattempts", default=config.getint("LTA", "missing_attempts"),help="How many attempts will be made to retrive failed downloads (i.e. missing files from the html file) [default: %default]")
 group.add_option("--delay", action="store", type="int", dest="ltadelay", default=config.getint("LTA", "delay"), help="Time in seconds between each missing file attempt [default: %default]")
 group.add_option("--savedir", action="store", type="string", dest="ltadir", default=config.get("LTA", "savedir"),help="Directory to save data from LTA [default: %default]")
 parser.add_option_group(group)
