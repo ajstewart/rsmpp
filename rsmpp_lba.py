@@ -503,6 +503,7 @@ else:
 		subprocess.call(["cp","-r",html, data_dir])
 		#Switch to data_dir, read in html file and start downloading
 		os.chdir(data_dir)
+		print os.getcwd()
 		html_temp=open(html, 'r')
 		initfetch=[htmlline.rstrip('\n') for htmlline in html_temp]
 		html_temp.close()
@@ -533,7 +534,7 @@ else:
 				for ltafile in tofetch:
 					log.info(ltafile.split("/")[-1])
 				log.info("----------------------------------------")
-				log.info("Waiting {0} seconds before attempting to fetch missing files...")
+				log.info("Waiting {0} seconds before attempting to fetch missing files...".format(ltadelay))
 				time.sleep(ltadelay)
 				if ltameth=="html":
 					lta_workers.map(rsmshared.fetch, tofetch)

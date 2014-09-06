@@ -537,7 +537,7 @@ else:
 				for ltafile in tofetch:
 					log.info(ltafile.split("/")[-1])
 				log.info("----------------------------------------")
-				log.info("Waiting {0} seconds before attempting to fetch missing files...")
+				log.info("Waiting {0} seconds before attempting to fetch missing files...".format(ltadelay))
 				time.sleep(ltadelay)
 				if ltameth=="html":
 					lta_workers.map(rsmshared.fetch, tofetch)
