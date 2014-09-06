@@ -511,7 +511,7 @@ else:
     		lta_workers.map(rsmshared.fetch, initfetch)
         else:
             lta_workers.map(rsmshared.fetchgrid, initfetch)
-		log.info("Initial fetch complete!")
+        log.info("Initial fetch complete!")
 		#Start the checking for missing files
 		log.info("Checking for missing files...")
 		for attempt in range(missattempts):

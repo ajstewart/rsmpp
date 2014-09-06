@@ -1,4 +1,4 @@
-#Version 2.00a
+#Version 2.1.0a
 
 import os, subprocess,time, glob, logging, sys
 import pyrap.tables as pt
