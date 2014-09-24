@@ -199,6 +199,8 @@ def rsm_bandsndppp(a, rsm_bands):
 	n.write("msin={0}\n\
 msin.datacolumn=DATA\n\
 msin.baseline=[CR]S*&\n\
+msin.missingdata=True\n\
+msin.orderms=False\n\
 msout={1}/{2}_BAND{3}.MS.dppp.tmp\n\
 steps=[]".format(rsm_bands[a], current_obs, b,'%02d' % band))
 	n.close()
@@ -411,7 +413,7 @@ def AW_Steps(g, aw_sets, maxb, aw_env, niter, automaticthresh, bandsthreshs_dict
 	ft.close()
 	log.debug("Frequency = {0} Hz".format(freq))
 	log.debug("Wavelength = {0} m".format(wave_len))
-	log.info("UVmax = {0}".format(UVmax))
+	log.debug("UVmax = {0}".format(UVmax))
 	beam=int(g.split("SAP")[1][:3])
 	beamc="SAP00{0}".format(beam)
 	finish_iters=niter

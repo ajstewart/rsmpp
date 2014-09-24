@@ -7,7 +7,7 @@
 #A full user guide can be found on google docs here:
 # https://docs.google.com/document/d/1aqUxesq4I02i1mKJw_XHjLy0smCbL37uhtBpNf9rs9w
 
-#Written by Adam Stewart, Last Update June 2014
+#Written by Adam Stewart, Last Update September 2014
 
 #---Version 2.1.0---
 
@@ -82,7 +82,7 @@ For full details on how to run the script, see the user manual here: https://doc
 parser = optparse.OptionParser(usage=usage,version="%prog v{0}".format(vers), description=description)
 #define all the options for optparse
 group = optparse.OptionGroup(parser, "General Options")
-group.add_option("--nice", action="store", type="int", dest="nice", default=config.getboolean("GENERAL", "nice"), help="Set nice level for processing [default: %default]")
+group.add_option("--nice", action="store", type="int", dest="nice", default=config.getint("GENERAL", "nice"), help="Set nice level for processing [default: %default]")
 group.add_option("--loglevel", action="store", type="string", dest="loglevel", default=config.get("GENERAL", "loglevel"),help="Use this option to set the print out log level ['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG'] [default: %default]")
 group.add_option("-D", "--lightweight", action="store_true", dest="destroy", default=config.getboolean("GENERAL", "lightweight"),help="Use this option to delete all the output except images, logs and plots [default: %default]")
 group.add_option("-n", "--ncores", action="store", type="int", dest="ncores", default=config.getint("GENERAL", "ncores"), help="Specify the number of observations to process simultaneously (i.e. the number of cores to use)[default: %default]")
@@ -90,7 +90,7 @@ group.add_option("-o", "--output", action="store", type="string", dest="newdir",
 group.add_option("-w", "--overwrite", action="store_true", dest="overwrite", default=config.getboolean("GENERAL", "overwrite"),help="Use this option to overwrite output directory if it already exists [default: %default]")
 parser.add_option_group(group)
 group = optparse.OptionGroup(parser, "LTA Options")
-group.add_option("--LTAfetch", action="store_true", dest="lta", default=config.getint("LTA", "LTAfetch"), help="Turn on or off LTA data fetching [default: %default]")
+group.add_option("--LTAfetch", action="store_true", dest="lta", default=config.getboolean("LTA", "LTAfetch"), help="Turn on or off LTA data fetching [default: %default]")
 group.add_option("--method", action="store", type="choice", choices=["html","srm"], dest="ltameth", default=config.get("LTA", "method"),help="Select to use 'html' or 'srm' for data transfer [default: %default]")
 group.add_option("--htmlfile", action="store", type="string", dest="htmlfile", default=config.get("LTA", "htmlfile"),help="LTA html.txt file with wget addresses [default: %default]")
 group.add_option("--n_simult_dwnlds", action="store", type="int", dest="ltacores", default=config.getint("LTA", "n_simult_dwnlds"), help="Specify the number of simultaneous downloads [default: %default]")
@@ -104,7 +104,7 @@ group.add_option("--obsids", action="store", type="string", dest="obsids", defau
 group.add_option("-d", "--datadir", action="store", type="string", dest="datadir", default=config.get("DATA", "datadir"),help="Specify name of the directoy where the data is held (in obs subdirectories) [default: %default]")
 group.add_option("-B", "--bandsno", action="store", type="int", dest="bandsno", default=config.getint("DATA", "bandsno"),help="Specify how many bands there are. [default: %default]")
 group.add_option("-S", "--subsinbands", action="store", type="int", dest="subsinbands", default=config.getint("DATA", "subsinbands"),help="Specify how sub bands are in a band. [default: %default]")
-group.add_option("-b", "--beams", action="store", type="string", dest="beams", default=config.get("DATA", "beams"), help="Use this option to select which beams to process in the format of a list of beams with no spaces \
+group.add_option("-b", "--targetbeams", action="store", type="string", dest="beams", default=config.get("DATA", "targetbeams"), help="Use this option to select which beams to process in the format of a list of beams with no spaces \
 separated by commas eg. 0,1,2 [default: %default]")
 group.add_option("-j", "--target_oddeven", action="store", type="string", dest="target_oddeven", default=config.get("DATA", "target_oddeven"),help="Specify whether the targets are the odd numbered observations or the even [default: %default]")
 group.add_option("--precalibrated", action="store_true", dest="precalib", default=config.getboolean("DATA", "precalibrated"),help="Select this option if the data has been precalibrated by ASTRON [default: %default]")
@@ -126,7 +126,7 @@ group.add_option("-g", "--corparset", action="store", type="string", dest="corpa
 group.add_option("-z", "--phaseparset", action="store", type="string", dest="phaseparset", default=config.get("PARSETS", "phaseparset"),help="Specify bbs parset to use on phase only calibration of target [default: %default]")
 parser.add_option_group(group)
 group = optparse.OptionGroup(parser, "Skymodel Options:")
-group.add_option("-e", "--calmodel", action="store", type="string", dest="calmodel", default="AUTO",help="Specify a calibrator skymodel. By default the calibrator will be \
+group.add_option("-e", "--calmodel", action="store", type="string", dest="calmodel", default=config.get("SKYMODELS", "calmodel"),help="Specify a calibrator skymodel. By default the calibrator will be \
 detected and the respective model will be automatically fetched [default: %default]")
 group.add_option("-s", "--targetmodel", action="store", type="string", dest="skymodel", default=config.get("SKYMODELS", "targetmodel"),help="Specify a particular field skymodel to use for the phase only calibration, by default the skymodels will be\
 automatically generated.[default: %default]")
@@ -273,6 +273,8 @@ if toprocess!="to_process.py":
 	elif "-" in toprocess:
 		tempsplit=sorted(toprocess.split("-"))
 		to_process=["L{0}".format(i) for i in range(int(tempsplit[0].split("L")[-1]),int(tempsplit[1].split("L")[-1])+1)]
+	else:
+		to_process=toprocess.split()
 #get the beams to run
 beams=[int(i) for i in options.beams.split(',')]
 nchans=0
@@ -929,17 +931,12 @@ Script now exiting...".format(i, data_dir))
 		#																Final Concat Step for MSSS style
 		#----------------------------------------------------------------------------------------------------------------------------------------------
 		correct=nchans*subsinbands
+		log.info("Final concatenate process started...")
 		for be in beams:
-			log.info("Final conatenate process started...")
 		# 	# snapshot_concat_multi=partial(rsmshared.snapshot_concat, beam=be)	#Currently cannot combine all bands in a snapshot (different number of subands)
 			final_concat_multi=partial(rsmhbaf.final_concat, beam=be, target_obs=target_obs, correct=correct)
 			if __name__ == '__main__':
 				worker_pool.map(final_concat_multi, rsm_band_numbers)
-		# 		pool_concat = Pool(processes=5)
-		# 		# pool_snapconcat = Pool(processes=5)
-		# 		# pool_snapconcat.map(snapshot_concat_multi, sorted(target_obs))
-		# 		pool_concat.map(final_concat_multi, rsm_band_numbers)
-		# 	print "Done!"
 
 		#----------------------------------------------------------------------------------------------------------------------------------------------
 		#																Imaging Step
@@ -1060,7 +1057,7 @@ Script now exiting...".format(i, data_dir))
 
 		os.chdir("..")
 		log.info("Run finished at {0} UTC with a runtime of {1}".format(date_time_end, str(tdelta)))
-		subprocess.call(["cp", "rsmpp.log", "{0}/rsmpp_{0}.log".format(newdirname)])
+		subprocess.call(["cp", "rsmpp_hba.log", "{0}/rsmpp_{0}.log".format(newdirname)])
 	except Exception, e:
 		log.exception(e)
 		end=datetime.datetime.utcnow()

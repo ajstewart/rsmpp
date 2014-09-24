@@ -65,7 +65,7 @@ def check_targets(i, beam, targets, targets_corrupt, rsm_bands, rsm_band_numbers
 	for s in target_range:
 		if s not in temp:
 			missingfile.write("Sub band {0} missing from observation {1}\n".format(s, i))
-			missing_count+=1
+			localmiss+=1
 	log.debug("To remove = {0}".format(toremove))
 	for j in toremove:
 		targets[i][beamselect].remove(j)

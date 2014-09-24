@@ -7,7 +7,7 @@
 #A full user guide can be found on google docs here:
 # https://docs.google.com/document/d/1aqUxesq4I02i1mKJw_XHjLy0smCbL37uhtBpNf9rs9w
 
-#Written by Adam Stewart, Last Update June 2014
+#Written by Adam Stewart, Last Update September 2014
 
 #---Version 2.1.0---
 
@@ -97,7 +97,7 @@ group.add_option("--obsids", action="store", type="string", dest="obsids", defau
 group.add_option("-d", "--datadir", action="store", type="string", dest="datadir", default=config.get("DATA", "datadir"),help="Specify name of the directoy where the data is held (in obs subdirectories) [default: %default]")
 group.add_option("-B", "--bandsno", action="store", type="int", dest="bandsno", default=config.getint("DATA", "bandsno"),help="Specify how many bands there are. [default: %default]")
 group.add_option("-S", "--subsinbands", action="store", type="int", dest="subsinbands", default=config.getint("DATA", "subsinbands"),help="Specify how sub bands are in a band. [default: %default]")
-group.add_option("-b", "--beams", action="store", type="string", dest="beams", default=config.get("DATA", "beams"), help="Use this option to select which beams to process in the format of a list of beams with no spaces \
+group.add_option("-b", "--targetbeams", action="store", type="string", dest="beams", default=config.get("DATA", "targetbeams"), help="Use this option to select which beams to process in the format of a list of beams with no spaces \
 separated by commas eg. 0,1,2 [default: %default]")
 group.add_option("--precalibrated", action="store_true", dest="precalib", default=config.getboolean("DATA", "precalibrated"),help="Select this option if the data has been precalibrated by ASTRON [default: %default]")
 group.add_option("--precalibratedloc", action="store", type="choice", choices=['DATA', 'CORRECTED_DATA',], dest="precalibloc", default=config.get("DATA", "precalibratedloc"), help="Define whether the calibrated data is located in the DATA or CORRECTED_DATA column [default: %default]")
@@ -121,7 +121,7 @@ group.add_option("-g", "--corparset", action="store", type="string", dest="corpa
 group.add_option("-z", "--phaseparset", action="store", type="string", dest="phaseparset", default=config.get("PARSETS", "phaseparset"),help="Specify bbs parset to use on phase only calibration of target [default: %default]")
 parser.add_option_group(group)
 group = optparse.OptionGroup(parser, "Skymodel Options:")
-group.add_option("-e", "--calmodel", action="store", type="string", dest="calmodel", default="AUTO",help="Specify a calibrator skymodel. By default the calibrator will be \
+group.add_option("-e", "--calmodel", action="store", type="string", dest="calmodel", default=config.get("SKYMODELS", "calmodel"),help="Specify a calibrator skymodel. By default the calibrator will be \
 detected and the respective model will be automatically fetched [default: %default]")
 group.add_option("-s", "--targetmodel", action="store", type="string", dest="skymodel", default=config.get("SKYMODELS", "targetmodel"),help="Specify a particular field skymodel to use for the phase only calibration, by default the skymodels will be\
 automatically generated.[default: %default]")
@@ -591,7 +591,7 @@ else:
 			for obsdel in obsids_toremove:
 				to_process.remove(obsdel)
 			#Perhaps user forgot to change obs ids in to process - check for this and switch to the ids downloaded if necessary
-			if len(to_process) < 2:
+			if len(to_process) < 1:
 				log.warning("The to_process obs ids list contains less than the minimum number required.")
 				log.warning("Switching to process the data downloaded from the LTA.")
 				to_process=uniq_ltaobsids
