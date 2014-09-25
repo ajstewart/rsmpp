@@ -1,6 +1,7 @@
 #True false values can be represented by on/off, 1/0, true/false, yes/no
 
 [GENERAL]
+mode=INT
 nice=10
 loglevel=INFO
 lightweight=on
@@ -26,6 +27,8 @@ targetbeams=0,1,2,3,4,5
 target_oddeven=odd
 precalibrated=no
 precalibratedloc=DATA
+calibratorbeam=1
+remaindersubbands=4
 
 [PROCESSING]
 rficonsole=off

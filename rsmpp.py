@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-#rsmpp_hba.py
+#rsmpp.py
 
 #LOFAR RSM data processing script designed for the Southampton lofar machines.
 
@@ -22,7 +22,7 @@ import emailslofar as em
 vers="2.1.0"	#Current version number
 
 import rsmpp_hbafuncs as rsmhbaf
-import rsmppsharedfuncs as rsmshared
+import rsmppfuncs as rsmshared
 
 mainrootpath=os.path.realpath(__file__)
 mainrootpath=mainrootpath.split("/")[:-1]
@@ -42,7 +42,7 @@ if curr_env["LOFARROOT"] in rsmshared.correct_lofarroot:
 else:
 	chosen_environ=curr_env["LOFARROOT"].split("/")[-2]
 
-config_file="rsmpp_hba.parset"
+config_file="rsmpp.parset"
 
 #Cheat to create extra option 'setup'
 if len(sys.argv) > 1:
@@ -59,7 +59,7 @@ if len(sys.argv) > 1:
 if not os.path.isfile(config_file):
 	# subprocess.call(["cp", os.path.join(mainrootpath, config_file), "."])
 	print "The parset file 'rsmpp.parset' could not be found make sure your directory is setup for the pipeline correctly by entering:\n\
-rsmpp_hba.py --setup"
+rsmpp.py --setup"
 	sys.exit()
 
 #Read in the config file
@@ -82,6 +82,8 @@ For full details on how to run the script, see the user manual here: https://doc
 parser = optparse.OptionParser(usage=usage,version="%prog v{0}".format(vers), description=description)
 #define all the options for optparse
 group = optparse.OptionGroup(parser, "General Options")
+group.add_option("--mode", action="store", type="choice", dest="mode", choices=['SIM', 'INT'], default=config.get("GENERAL", "mode").upper(), help="Select which mode to run - For interleaved observations\
+input 'INT' (formally HBA), for simultanous calibrator observations input 'SIM' (formally LBA) [default: %default]")
 group.add_option("--nice", action="store", type="int", dest="nice", default=config.getint("GENERAL", "nice"), help="Set nice level for processing [default: %default]")
 group.add_option("--loglevel", action="store", type="string", dest="loglevel", default=config.get("GENERAL", "loglevel"),help="Use this option to set the print out log level ['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG'] [default: %default]")
 group.add_option("-D", "--lightweight", action="store_true", dest="destroy", default=config.getboolean("GENERAL", "lightweight"),help="Use this option to delete all the output except images, logs and plots [default: %default]")
@@ -109,6 +111,9 @@ separated by commas eg. 0,1,2 [default: %default]")
 group.add_option("-j", "--target_oddeven", action="store", type="string", dest="target_oddeven", default=config.get("DATA", "target_oddeven"),help="Specify whether the targets are the odd numbered observations or the even [default: %default]")
 group.add_option("--precalibrated", action="store_true", dest="precalib", default=config.getboolean("DATA", "precalibrated"),help="Select this option if the data has been precalibrated by ASTRON [default: %default]")
 group.add_option("--precalibratedloc", action="store", type="choice", choices=['DATA', 'CORRECTED_DATA',], dest="precalibloc", default=config.get("DATA", "precalibratedloc"), help="Define whether the calibrated data is located in the DATA or CORRECTED_DATA column [default: %default]")
+group.add_option("-C", "--calibratorbeam", action="store", type="int", dest="calibratorbeam", default=config.getint("DATA", "calibratorbeam"),help="Specify which beam is the calibrator sub bands [default: %default]")
+group.add_option("-E", "--remaindersubbands", action="store", type=int, dest="remaindersbs", default=config.getint("DATA", "remaindersubbands"), help="Use this option to indicate if there are any leftover sub bands that do not fit into the banding \
+scheme chosen - they will be added to the last band [default: %default]")
 parser.add_option_group(group)
 group = optparse.OptionGroup(parser, "Processing Options")
 group.add_option("--rficonsole", action="store_true", dest="rfi", default=config.getboolean("PROCESSING", "rficonsole"),help="Use this option to run rficonsole before phase-only calibration [default: %default]")
@@ -148,7 +153,7 @@ group.add_option("-I", "--initialiter", action="store", type="int", dest="initia
 group.add_option("-R", "--bandrms", action="store", type="string", dest="bandrms", default=config.get("IMAGING", "bandrms"),help="Define the prior level of expected band RMS for use in automatic cleaning, enter as '0.34,0.23,..' no spaces, in units of Jy [default: %default]")
 group.add_option("-U", "--maxbunit", action="store", type="choice", dest="maxbunit", choices=['UV', 'm',], default=config.get("IMAGING", "maxbunit"),help="Choose which method to limit the baselines, enter 'UV' for UVmax (in klambda) or 'm' for physical length (in metres) [default: %default]")
 group.add_option("-L", "--maxbaseline", action="store", type="int", dest="maxbaseline", default=config.getfloat("IMAGING", "maxbaseline"),help="Enter the maximum baseline to image out to, making sure it corresponds to the unit options [default: %default]")
-group.add_option("-m", "--mask", action="store_true", dest="mask", default=config.getboolean("IMAGING", "mask"), help="Use option to NOT use a mask when cleaning [default: %default]")
+group.add_option("-m", "--mask", action="store_true", dest="mask", default=config.getboolean("IMAGING", "mask"), help="Use option to use a mask when cleaning [default: %default]")
 group.add_option("-M", "--mosaic", action="store_true", dest="mosaic", default=config.getboolean("IMAGING", "mosaic"),help="Use option to produce snapshot, band, mosaics after imaging [default: %default]")
 group.add_option("--avgpbradius", action="store", type="float", dest="avgpbrad", default=config.get("IMAGING", "avgpbrad"),help="Choose radius for which avgpbz.py trims the primary beam when mosaicing [default: %default]")
 group.add_option("--ncpmode", action="store_true", dest="ncp", default=config.get("IMAGING", "ncpmode"),help="Turn this option on when mosaicing the North Celestial Pole [default: %default]")
@@ -204,14 +209,19 @@ log.addHandler(term)
 if phaseO:
 	textlog=logging.FileHandler('rsmpp_phaseonly.log', mode='w')
 else:
-	textlog=logging.FileHandler('rsmpp_hba.log', mode='w')
+	textlog=logging.FileHandler('rsmpp.log', mode='w')
 textlog.setLevel(logging.DEBUG)
 textlog.setFormatter(logformat)
 log.addHandler(textlog)
 
+#Define mode for log
+mastermode=options.mode
+mode_choices={'SIM':'Simultaneous', 'INT':'Interleaved'}
+
 log.info("Run started at {0} UTC".format(date_time_start))
 log.info("rsmpp.py Version {0}".format(vers))
 log.info("Running on {0} lofar software".format(chosen_environ))
+log.info("Running in {0} mode".format(mode_choices[mastermode]))
 log.info("User: {0} - email set to {1}".format(user, mail))
 
 #----------------------------------------------------------------------------------------------------------------------------------------------
@@ -254,6 +264,8 @@ root_dir=os.getcwd()	#where the script is run from
 destroy=options.destroy	#lightweight mode on or off
 bandsno=options.bandsno	#number of bands there should be
 subsinbands=options.subsinbands	#number of sub bands to combine to make a band
+calibbeam=options.calibratorbeam	#calibrator beam in sim mode
+remaindersbs=options.remaindersbs	#remainder sub bands - only in sim mode
 toprocess=options.obsids	#toprocess variable - what ID's to run
 lta=options.lta	#fetch data from lta on or off
 html=options.htmlfile	#lta html file
@@ -290,13 +302,13 @@ log.info("Performing initial checks and assigning settings...")
 if os.path.isdir(os.path.join(root_dir, "parsets")) == False:
 	log.critical("Parsets directory cannot be found.\n\
 Please make sure all parsets are located in a directory named 'parsets'.\n\
-Script now exiting...")
+Pipeline now stopping...")
 	sys.exit()
 
 #Checks number of threads is reasonable
 if 0 > n or n > multiprocessing.cpu_count():
 	log.critical("Number of cores must be between 1 - {0}\n\
-Script now exiting...".format(multiprocessing.cpu_count()))
+Pipeline now stopping...".format(multiprocessing.cpu_count()))
 	sys.exit()
 
 #Whether flagging is to be used
@@ -310,7 +322,7 @@ if imaging_set:
 	bandsthreshs_dict={}
 	if os.path.isfile("parsets/aw.parset") == False:
 		log.critical("Cannot find imaging parset file 'aw.parset' in the 'parsets' directory, please check it is present\n\
-Script now exiting...")
+Pipeline now stopping...")
 		sys.exit()
 	#if automatic method we then need to check we have the correct number of band thresholds
 	if automaticthresh:
@@ -321,8 +333,6 @@ Script now exiting...")
 		else:
 			for i in range(0, len(tempbandsthresh)):
 				bandsthreshs_dict["{0:02d}".format(i)]=float(tempbandsthresh[i])
-	#check baseline selections
-		
 
 #Checks if post bbs is to be used.
 if postcut !=0:
@@ -333,7 +343,7 @@ else:
 #Check presence of to_process.py if needed
 if toprocess=="to_process.py":
 	if os.path.isfile(toprocess)==False:
-		log.critical("Cannot locate 'to_process.py', please check file is present\nScript now exiting...")
+		log.critical("Cannot locate 'to_process.py', please check file is present\nPipeline now stopping...")
 		sys.exit()
 
 #Check skymodel creation choice or file
@@ -342,7 +352,7 @@ if skymodel=="AUTO":
 else:
 	if not os.path.isfile(skymodel):
 		log.error("Cannot locate {0}, please check your skymodel file is present\n\
-If you would like to automatically generate a skymodel file do not use the -s option.\nScript now exiting...".format(skymodel))
+If you would like to automatically generate a skymodel file do not use the -s option.\nPipeline now stopping...".format(skymodel))
 		sys.exit()
 	else:
 		create_sky=False
@@ -352,7 +362,7 @@ if calmodel=="AUTO":
 else:
 	if not os.path.isfile(calmodel):
 		log.error("Cannot locate {0}, please check your calmodel file is present\n\
-If you would like to automatically fetch the calibrator skymodel set the calmodel option to 'AUTO'.\nScript now exiting...".format(skymodel))
+If you would like to automatically fetch the calibrator skymodel set the calmodel option to 'AUTO'.\nPipeline now stopping...".format(skymodel))
 		sys.exit()
 	else:
 		create_cal=False	
@@ -367,7 +377,7 @@ if lta:
     		log.critical("Please set up and try again.")
     		sys.exit()
 	if not os.path.isfile(html):
-		log.critical("Cannot locate {0}, please check file is present\nScript now exiting...".format(ndppp_parset))
+		log.critical("Cannot locate {0}, please check file is present\nPipeline now stopping...".format(ndppp_parset))
 		sys.exit()	
 	if ltadir!=data_dir:
 		data_dir=ltadir
@@ -376,32 +386,32 @@ if lta:
 			os.makedirs(data_dir)
 		except:
 			log.critical("The destination directory for the LTA transfer doesn't seem to exist and cannot be created")
-			log.critical("Script now exiting...")
+			log.critical("Pipeline now stopping...")
 			sys.exit()
 	
 log.info("Checking required parsets...")
 #NDPPP parset
 if not os.path.isfile(ndppp_parset):
-	log.critical("Cannot locate {0}, please check file is present\nScript now exiting...".format(ndppp_parset))
+	log.critical("Cannot locate {0}, please check file is present\nPipeline now stopping...".format(ndppp_parset))
 	sys.exit()
 #Check data dir
 if not os.path.isdir(data_dir):
 	log.critical("Data Directory \"{0}\" doesn't seem to exist..., please check it has been set correctly.\n\
-Script now exiting...".format(data_dir))
+Pipeline now stopping...".format(data_dir))
 	sys.exit()
 #Check the phase only parset
 if not os.path.isfile(phaseparset):
-	log.critical("Cannot locate {0}, please check file is present\nScript now exiting...".format(phaseparset))
+	log.critical("Cannot locate {0}, please check file is present\nPipeline now stopping...".format(phaseparset))
 	sys.exit()
 #Checks presence of the parset files
 if not os.path.isfile(calparset):
-	log.critical("Cannot locate {0}, please check file is present\nScript now exiting...".format(calparset))
+	log.critical("Cannot locate {0}, please check file is present\nPipeline now stopping...".format(calparset))
 	sys.exit()
 if not os.path.isfile(correctparset):
-	log.critical("Cannot locate {0}, please check file is present\nScript now exiting...".format(correctparset))
+	log.critical("Cannot locate {0}, please check file is present\nPipeline now stopping...".format(correctparset))
 	sys.exit()
 if not os.path.isfile(dummy):
-	log.critical("Cannot locate {0}, please check file is present\nScript now exiting...".format(dummy))
+	log.critical("Cannot locate {0}, please check file is present\nPipeline now stopping...".format(dummy))
 	sys.exit()
 
 #----------------------------------------------------------------------------------------------------------------------------------------------
@@ -478,7 +488,7 @@ else:
 			subprocess.call("rm -rf {0}".format(newdirname), shell=True)
 		else:
 			log.critical("Directory \"{0}\" already exists and overwrite option not used, run again with '-w' option to overwrite directory or rename/move old results file\n\
-	Script now exiting...".format(newdirname))
+	Pipeline now stopping...".format(newdirname))
 			sys.exit()
 	
 	# Makes the new directory and moves to it
@@ -493,9 +503,9 @@ else:
 	if not os.path.isdir('logs'):
 		os.mkdir('logs')
 	#copy over parset file used
+	subprocess.call(["cp",os.path.join("..", config_file), config_file+"_used"])
 	if lta:
 		subprocess.call(["cp","-r","{0}".format(os.path.join("..", html)), "."])
-	subprocess.call(["cp",os.path.join("..", config_file), config_file+"_used"])
 	#Gets the to_process list and assigns it to target_obs
 	log.info("Collecting observations to process...")
 
@@ -505,6 +515,7 @@ else:
 		target_obs.sort()
 	else:
 		target_obs=to_process
+	minimum_obstorun={"INT":2, "SIM":1}
 	
 	#----------------------------------------------------------------------------------------------------------------------------------------------
 	#																			LTA Fetch
@@ -597,10 +608,11 @@ else:
 			for obsdel in obsids_toremove:
 				to_process.remove(obsdel)
 			#Perhaps user forgot to change obs ids in to process - check for this and switch to the ids downloaded if necessary
-			if len(to_process) < 2:
+			if len(to_process) < minimum_obstorun[mastermode]:
 				log.warning("The to_process obs ids list contains less than the minimum number required.")
 				log.warning("Switching to process the data downloaded from the LTA.")
 				to_process=uniq_ltaobsids
+				target_obs=to_process
 					
 			log.info("Data ready for pipeline use!")
 			log.info("Removing LTA tar files...")
@@ -610,33 +622,39 @@ else:
 		
 		#Change back to output directory
 		os.chdir(working_dir)
-	
+	else:
+		if len(to_process) < minimum_obstorun[mastermode]:
+			log.critical("The to_process obs ids list contains less than the minimum number required.")
+			log.critical("Please check your mode and observations to run.")
+			log.critical("Pipeline now stopping...")
+			sys.exit()
 	
 	#----------------------------------------------------------------------------------------------------------------------------------------------
 	#																Load in User List and Check Data Presence
 	#----------------------------------------------------------------------------------------------------------------------------------------------
 	try:
 		#This splits up the sets to process into targets and calibrators.
-		odd=[]
-		even=[]
-		firstid=target_obs[0]
-		if int(firstid[-5:])%2 == 0:
-			firstid_oe="even"
-		else:
-			firstid_oe="odd"
-
-		for obs in target_obs:
-			if int(obs[-5:])%2 == 0:
-				even.append(obs)
+		if mastermode=="INT":
+			odd=[]
+			even=[]
+			firstid=target_obs[0]
+			if int(firstid[-5:])%2 == 0:
+				firstid_oe="even"
 			else:
-				odd.append(obs)
+				firstid_oe="odd"
+
+			for obs in target_obs:
+				if int(obs[-5:])%2 == 0:
+					even.append(obs)
+				else:
+					odd.append(obs)
 		
-		if target_oddeven=="even":
-			target_obs=even
-			calib_obs=odd
-		else:
-			target_obs=odd
-			calib_obs=even
+			if target_oddeven=="even":
+				target_obs=even
+				calib_obs=odd
+			else:
+				target_obs=odd
+				calib_obs=even
 
 		#The following passage just checks that all the data is present where it should be.
 		log.info("Observations to be processed:")
@@ -644,19 +662,23 @@ else:
 			log.info(i)
 			if os.path.isdir(os.path.join(data_dir,i))==False:
 				log.critical("Snapshot {0} cannot be located in data directory {1}, please check.\n\
-Script now exiting...".format(i, data_dir))
+Pipeline now stopping...".format(i, data_dir))
 				sys.exit()
 			if not os.path.isdir(i):
-				subprocess.call("mkdir -p {0}/logs {0}/flagging {0}/datasets".format(i), shell=True)
-		log.info("Calibrators to be processed:")
-		for i in calib_obs:
-			log.info(i)
-			if os.path.isdir(os.path.join(data_dir,i))==False:
-				log.critical("Calibrator Snapshot {0} cannot be located in data directory {1}, please check.\n\
-Script now exiting...".format(i, data_dir))
-				sys.exit()
-			if not os.path.isdir(i):
-				subprocess.call("mkdir -p {0}/plots {0}/logs".format(i), shell=True)
+				if mastermode=="INT":
+					subprocess.call("mkdir -p {0}/logs {0}/flagging {0}/datasets".format(i), shell=True)
+				else:
+					subprocess.call("mkdir -p {0}/logs {0}/flagging {0}/datasets {0}/calibrators".format(i), shell=True)
+		if mastermode=="INT":
+			log.info("Calibrators to be processed:")
+			for i in calib_obs:
+				log.info(i)
+				if os.path.isdir(os.path.join(data_dir,i))==False:
+					log.critical("Calibrator Snapshot {0} cannot be located in data directory {1}, please check.\n\
+	Pipeline now stopping...".format(i, data_dir))
+					sys.exit()
+				if not os.path.isdir(i):
+					subprocess.call("mkdir -p {0}/plots {0}/logs".format(i), shell=True)
 
 
 		#----------------------------------------------------------------------------------------------------------------------------------------------
@@ -677,53 +699,93 @@ Script now exiting...".format(i, data_dir))
 		rsm_bands={}	#Store the measurement sets in terms of bands
 		rsm_bands_lens={}	#Store the length of each band (needed as some might be missing)
 		diff=(bandsno*subsinbands)
-		# diff=34
+		if mastermode=="SIM":
+			diff+=remaindersbs
 		rsm_band_numbers=range(bandsno)
-		# rsm_band_numbers=range(3)
 		nchans=0
 
 		log.info("Collecting and checking sub bands of observations..")
 		log.info("All measurement sets will be checked for any corruption.")
 		time.sleep(2)
-		for i,j in izip(target_obs, calib_obs):
-			missing_calibrators[i]=[]
-			corrupt_calibrators[i]=[]
-			targets_corrupt[i]=[]
-			log.info("Checking Calibrator {0}...".format(j))
-			calibglob=os.path.join(data_dir,j,'*.MS.dppp')
-			calibs[j]=sorted(glob.glob(calibglob))
-			log.debug(calibs[j])
-			if len(calibs[j])<1:
-				log.critical("Cannot find any measurement sets in directory {0} !".format(os.path.join(data_dir,j)))
-				sys.exit()
-			calibs_first=0		#Should always start on 0
-			calibs_last=int(calibs[j][-1].split('SB')[1][:3])	#Last one present
-			calib_range=range(calibs_first, calibs_last+1)		#Range of present (if last one is missing then this will be realised when looking at targets) 
-			present_calibs=[]
-			for c in calibs[j]:
-				calib_name=c.split("/")[-1]
-				#Check for corrupt datasets
-				try:
-					test=pt.table(c,ack=False)
-				except:
-					log.warning("Calibrator {0} is corrupt!".format(calib_name))
-					time.sleep(1)
-					corrupt_calibrators[i].append(c)
-				else:
-					test.close()
-					SB=int(c.split('SB')[1][:3])				#Makes a list of all the Calib sub bands present
-					present_calibs.append(SB)
-			for s in calib_range:
-				if s not in present_calibs:
-					missing_calibrators[i].append(s)		#Checks which ones are missing and records them
-					g.write("SB{0} calibrator missing in observation {1}\n".format('%03d' % s, j))
-					missing_count+=1
-			for b in beams:
-				#This now uses a function to check all the targets, now missing what calibs are missing - which without nothing can be done
-				localmiss=rsmhbaf.check_targets(i, b, targets, targets_corrupt, rsm_bands, rsm_band_numbers, rsm_bands_lens, missing_calibrators, data_dir, diff, g, subsinbands)
-				missing_count+=localmiss
-				#covers run if user accidentally adds a beam which is missing or doesn't exist.
-			log.info("{0} and {1} checks done!".format(i,j))
+		if mastermode=="INT":
+			for i,j in izip(target_obs, calib_obs):
+				missing_calibrators[i]=[]
+				corrupt_calibrators[i]=[]
+				targets_corrupt[i]=[]
+				log.info("Checking Calibrator {0}...".format(j))
+				calibglob=os.path.join(data_dir,j,'*.MS.dppp')
+				calibs[j]=sorted(glob.glob(calibglob))
+				log.debug(calibs[j])
+				if len(calibs[j])<1:
+					log.critical("Cannot find any measurement sets in directory {0} !".format(os.path.join(data_dir,j)))
+					sys.exit()
+				calibs_first=0		#Should always start on 0
+				calibs_last=int(calibs[j][-1].split('SB')[1][:3])	#Last one present
+				calib_range=range(calibs_first, calibs_last+1)		#Range of present (if last one is missing then this will be realised when looking at targets) 
+				present_calibs=[]
+				for c in calibs[j]:
+					calib_name=c.split("/")[-1]
+					#Check for corrupt datasets
+					try:
+						test=pt.table(c,ack=False)
+					except:
+						log.warning("Calibrator {0} is corrupt!".format(calib_name))
+						time.sleep(1)
+						corrupt_calibrators[i].append(c)
+					else:
+						test.close()
+						SB=int(c.split('SB')[1][:3])				#Makes a list of all the Calib sub bands present
+						present_calibs.append(SB)
+				for s in calib_range:
+					if s not in present_calibs:
+						missing_calibrators[i].append(s)		#Checks which ones are missing and records them
+						g.write("SB{0} calibrator missing in observation {1}\n".format('%03d' % s, j))
+						missing_count+=1
+				for b in beams:
+					#This now uses a function to check all the targets, now missing what calibs are missing - which without nothing can be done
+					localmiss=rsmshared.hba_check_targets(i, b, targets, targets_corrupt, rsm_bands, rsm_band_numbers, rsm_bands_lens, missing_calibrators, data_dir, diff, g, subsinbands)
+					missing_count+=localmiss
+					#covers run if user accidentally adds a beam which is missing or doesn't exist.
+				log.info("{0} and {1} checks done!".format(i,j))
+		else:
+			for i in target_obs:
+				log.info("Checking Calibrator observations {0} Beam SAP00{1}..".format(i, calibbeam))
+				missing_calibrators[i]=[]
+				corrupt_calibrators[i]=[]
+				targets_corrupt[i]=[]
+				calibglob=os.path.join(data_dir,i,'*SAP00{0}*.MS.dppp'.format(calibbeam))
+				calibs[i]=sorted(glob.glob(calibglob))
+				log.debug(calibs[i])
+				if len(calibs[i])<1:
+					log.critical("Cannot find any calibrator measurement sets in directory {0} !".format(os.path.join(data_dir,i)))
+					sys.exit()
+				calibs_first=int(calibs[i][0].split('SB')[1][:3])		#Should always start on 0
+				calibs_last=int(calibs[i][-1].split('SB')[1][:3])	#Last one present
+				calib_range=range(calibs_first, calibs_last+1)		#Range of present (if last one is missing then this will be realised when looking at targets) 
+				present_calibs=[]
+				for c in calibs[i]:
+					calib_name=c.split("/")[-1]
+					#Check for corrupt datasets
+					try:
+						test=pt.table(c, ack=False)
+					except:
+						log.warning("Calibrator {0} is corrupt!".format(calib_name))
+						time.sleep(1)
+						corrupt_calibrators[i].append(c)
+					else:
+						test.close()
+						SB=int(c.split('SB')[1][:3])				#Makes a list of all the Calib sub bands present
+						present_calibs.append(SB)
+				for s in calib_range:
+					if s not in present_calibs:
+						missing_calibrators[i].append(s)		#Checks which ones are missing and records them
+						g.write("SB{0} calibrator missing in observation {1}\n".format('%03d' % s, i))
+						missing_count+=1	
+				for b in beams:
+					#This now uses a function to check all the targets, now knowing what calibs are missing - which without nothing can be done
+					localmiss=rsmshared.lba_check_targets(i, b, targets, targets_corrupt, rsm_bands, rsm_band_numbers, rsm_bands_lens, missing_calibrators, data_dir, diff, g, subsinbands, calibbeam)
+					missing_count+=localmiss
+				log.info("{0} check done!".format(i))
 
 		g.close()
 
@@ -756,7 +818,7 @@ Script now exiting...".format(i, data_dir))
 				calib_name=calib_ms.col("LOFAR_TARGET")[0][0].replace(" ", "")
 				log.info("Calibrator Detected: {0}".format(calib_name))
 				calmodel="{0}.skymodel".format(calib_name)
-				if not os.path.isfile(os.path.join(mainrootpath, "skymodels", calmodel)):	#MOVE THESE!
+				if not os.path.isfile(os.path.join(mainrootpath, "skymodels", calmodel)):
 					log.critical("Could not find calibrator skymodel...")
 					if mail==True:
 						em.send_email(emacc,user_address,"rsmpp Job Error","{0},\n\nYour job {1} has encountered an error - calibrator skymodel could not be found for Calibrator {2}".format(user,newdirname, calib_name))
@@ -792,11 +854,19 @@ Script now exiting...".format(i, data_dir))
 
 		#Now working through the steps starting with NDPPP (see rsmppfuncs.py for functions)
 		postcorrupt=0
-		for i,j in izip(sorted(targets.keys()), sorted(calibs)):
-			log.info("Starting Initial NDPPP for {0} and {1}...".format(i, j))
-			current_obs=i
+		# for i,j in izip(sorted(targets.keys()), sorted(calibs)):
+		for snpsht in range(0, len(targets.keys())):
+			i=sorted(targets.keys())[snpsht]
+			if mastermode=="INT":
+				j=sorted(calibs.keys())[snpsht]
+				log.info("Starting Initial NDPPP for {0} and {1}...".format(i, j))
+			else:
+				j=i
+				log.info("Starting Initial NDPPP for {0}...".format(i))
+			current_obs=sorted(targets.keys()[i])
 			#Nearly all functions are used with partial such that they can be passed to .map
 			NDPPP_Initial_Multi=partial(rsmshared.NDPPP_Initial, wk_dir=working_dir, ndppp_base=ndppp_base, prec=precal, precloc=precalloc)
+			#Define calibrator observation depending on mode
 			if __name__ == '__main__':
 				if not precal:
 					worker_pool.map(NDPPP_Initial_Multi, calibs[j])
@@ -877,11 +947,18 @@ Script now exiting...".format(i, data_dir))
 			log.info("Done!")
 			# calibrate step 1 process
 			if not precal:
-				log.info("Calibrating calibrators and transferring solutions for {0} and {1}...".format(i, j))
-				calibrate_msss1_multi=partial(rsmhbaf.calibrate_msss1, beams=beams, diff=diff, calparset=calparset, 
-				calmodel=calmodel, correctparset=correctparset, dummy=dummy, oddeven=target_oddeven, firstid=firstid_oe, mode=mode)
-				if __name__ == '__main__':
-					worker_pool.map(calibrate_msss1_multi, calibs[j])
+				if mastermode=="INT":
+					log.info("Calibrating calibrators and transferring solutions for {0} and {1}...".format(i, j))
+					calibrate_msss1_multi=partial(rsmshared.hba_calibrate_msss1, beams=beams, diff=diff, calparset=calparset, 
+					calmodel=calmodel, correctparset=correctparset, dummy=dummy, oddeven=target_oddeven, firstid=firstid_oe, mode=mode)
+					if __name__ == '__main__':
+						worker_pool.map(calibrate_msss1_multi, calibs[j])
+				else:
+					log.info("Calibrating calibrators and transfering solutions for {0}...".format(i))
+					calibrate_msss1_multi=partial(rsmshared.lba_calibrate_msss1, beams=beams, diff=diff, calparset=calparset, 
+					calmodel=calmodel, correctparset=correctparset, dummy=dummy, calibbeam=calibbeam, mode=mode)
+					if __name__ == '__main__':
+						worker_pool.map(calibrate_msss1_multi, calibs[i])
 			else:
 				log.info("Data is precalibrated - calibrator calibration has been skipped")
 		
@@ -930,13 +1007,14 @@ Script now exiting...".format(i, data_dir))
 		#----------------------------------------------------------------------------------------------------------------------------------------------
 		#																Final Concat Step for MSSS style
 		#----------------------------------------------------------------------------------------------------------------------------------------------
-		correct=nchans*subsinbands
-		log.info("Final concatenate process started...")
-		for be in beams:
-		# 	# snapshot_concat_multi=partial(rsmshared.snapshot_concat, beam=be)	#Currently cannot combine all bands in a snapshot (different number of subands)
-			final_concat_multi=partial(rsmhbaf.final_concat, beam=be, target_obs=target_obs, correct=correct)
-			if __name__ == '__main__':
-				worker_pool.map(final_concat_multi, rsm_band_numbers)
+		if mastermode=="INT":
+			correct=nchans*subsinbands
+			log.info("Final concatenate process started...")
+			for be in beams:
+			# 	# snapshot_concat_multi=partial(rsmshared.snapshot_concat, beam=be)	#Currently cannot combine all bands in a snapshot (different number of subands)
+				final_concat_multi=partial(rsmhbaf.final_concat, beam=be, target_obs=target_obs, correct=correct)
+				if __name__ == '__main__':
+					worker_pool.map(final_concat_multi, rsm_band_numbers)
 
 		#----------------------------------------------------------------------------------------------------------------------------------------------
 		#																Imaging Step
@@ -1016,25 +1094,30 @@ Script now exiting...".format(i, data_dir))
  
 		#Finishes up and moves the directory if chosen, performing checks
 		log.info("Tidying up...")
-		os.mkdir("final_datasets")
-		subprocess.call("mv SAP00*BAND*_FINAL.MS.dppp final_datasets", shell=True)
-		if not precal:
-			for c in calib_obs:
-				subprocess.call("mkdir {0}/datasets {0}/parmdb_tables".format(c), shell=True)
-				subprocess.call("mv {0}/*.pdf {0}/plots".format(c), shell=True)
-				subprocess.call("mv {0}/*.tmp {0}/datasets".format(c), shell=True)
-				subprocess.call("mv {0}/*.parmdb {0}/parmdb_tables".format(c), shell=True)
-		os.mkdir("Calibrators")
-		mv_calibs=["mv",]+sorted(calib_obs)
-		mv_calibs.append("Calibrators")
-		subprocess.call(mv_calibs)
-		if precal:
-			subprocess.call(["rm", "-r", "Calibrators"])
+		if mastermode=="INT":
+			os.mkdir("final_datasets")
+			subprocess.call("mv SAP00*BAND*_FINAL.MS.dppp final_datasets > /dev/null 2>&1", shell=True)
+			if not precal:
+				for c in calib_obs:
+					subprocess.call("mkdir {0}/datasets {0}/parmdb_tables > /dev/null 2>&1".format(c), shell=True)
+					subprocess.call("mv {0}/*.pdf {0}/plots > /dev/null 2>&1".format(c), shell=True)
+					subprocess.call("mv {0}/*.tmp {0}/datasets > /dev/null 2>&1".format(c), shell=True)
+					subprocess.call("mv {0}/*.parmdb {0}/parmdb_tables > /dev/null 2>&1".format(c), shell=True)
+			os.mkdir("Calibrators")
+			mv_calibs=["mv",]+sorted(calib_obs)
+			mv_calibs.append("Calibrators")
+			subprocess.call(mv_calibs)
+			if precal:
+				subprocess.call(["rm", "-r", "Calibrators"])
 		for t in target_obs:
-			subprocess.call("mv {0}/*_uv.MS.dppp {0}/datasets".format(t), shell=True)
+			if mastermode=="SIM":
+				if not precal:
+					subprocess.call("mv {0}/*.tmp* {0}/calibrators > /dev/null 2>&1".format(t), shell=True)
+			subprocess.call("mv {0}/*_uv.MS.dppp {0}/datasets > /dev/null 2>&1".format(t), shell=True)
 			if autoflag:
 				subprocess.call("mv {0}/*.stats {0}/*.pdf {0}/*.tab {0}/flagging > /dev/null 2>&1".format(t), shell=True)
 		subprocess.call(["rm","-r","sky.calibrator","sky.dummy"])
+		
 		if postcorrupt==0:
 			subprocess.call(["rm","post_ndppp_corrupt_report.txt"])
 
@@ -1057,13 +1140,13 @@ Script now exiting...".format(i, data_dir))
 
 		os.chdir("..")
 		log.info("Run finished at {0} UTC with a runtime of {1}".format(date_time_end, str(tdelta)))
-		subprocess.call(["cp", "rsmpp_hba.log", "{0}/rsmpp_{0}.log".format(newdirname)])
+		subprocess.call(["cp", "rsmpp.log", "{0}/rsmpp_{0}.log".format(newdirname)])
 	except Exception, e:
 		log.exception(e)
 		end=datetime.datetime.utcnow()
 		date_time_end=end.strftime("%d-%b-%Y %H:%M:%S")
 		tdelta=end-now
-		subprocess.call(["cp", os.path.join(root_dir, "rsmpp_hba.log"), "rsmpp_hba_CRASH.log".format(newdirname)])
+		subprocess.call(["cp", os.path.join(root_dir, "rsmpp.log"), "rsmpp_CRASH.log".format(newdirname)])
 		if mail==True:
 			em.send_email(emacc,user_address,"rsmpp Job Error","{0},\n\nYour job {1} crashed with the following error:\n\n{2}\n\nTime of crash: {3}".format(user,newdirname,e, end))
 			em.send_email(emacc,"adam.stewart@astro.ox.ac.uk","rsmpp Job Error","{0}'s job '{1}' just crashed with the following error:\n\n{2}\n\nDirectory: {3}\n\nTime of crash: {4}".format(user,newdirname,e,root_dir,end))
