@@ -673,7 +673,7 @@ def hba_calibrate_msss1(Calib, beams, diff, calparset, calmodel, correctparset, 
 		target_name=target.split('/')[-1]
 		log.info("Transferring calibrator solutions to {0}...".format(target_name))
 		subprocess.call("calibrate-stand-alone --sourcedb sky.dummy --parmdb {0}.parmdb {1} {2} {3} > {4}/logs/calibrate_transfer_{5}.txt 2>&1".format(Calib, target, correctparset, dummy, curr_obs, target_name), shell=True)
-		rsmshared.shiftndppp(target, tar_obs, target_name)
+		shiftndppp(target, tar_obs, target_name)
 		
 def hba_final_concat(band, beam, target_obs, correct):
 	"""
@@ -779,4 +779,4 @@ def lba_calibrate_msss1(Calib, beams, diff, calparset, calmodel, correctparset, 
 		target_name=target.split('/')[-1]
 		log.info("Transferring calibrator solutions to {0}...".format(target_name))
 		subprocess.call("calibrate-stand-alone --sourcedb sky.dummy --parmdb {0}/instrument {1} {2} {3} > logs/calibrate_transfer_{4}.txt 2>&1".format(Calib, target, correctparset, dummy, target_name), shell=True)
-		rsmshared.shiftndppp(target, curr_obs, target_name)
+		shiftndppp(target, curr_obs, target_name)

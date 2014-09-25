@@ -863,7 +863,6 @@ Pipeline now stopping...".format(i, data_dir))
 			else:
 				j=i
 				log.info("Starting Initial NDPPP for {0}...".format(i))
-			current_obs=sorted(targets.keys()[i])
 			#Nearly all functions are used with partial such that they can be passed to .map
 			NDPPP_Initial_Multi=partial(rsmshared.NDPPP_Initial, wk_dir=working_dir, ndppp_base=ndppp_base, prec=precal, precloc=precalloc)
 			#Define calibrator observation depending on mode

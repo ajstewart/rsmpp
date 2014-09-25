@@ -1,7 +1,7 @@
 Strategy.InputColumn = DATA
 Strategy.TimeRange = []
 Strategy.Baselines = *&
-Strategy.ChunkSize = 0
+Strategy.ChunkSize = 120
 Strategy.UseSolver = F
 Strategy.Steps = [solve, correct]
 
