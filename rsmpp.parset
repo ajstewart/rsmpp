@@ -1,6 +1,8 @@
 #True false values can be represented by on/off, 1/0, true/false, yes/no
+#Some [DATA] arguments are not valid for a particular mode but should still be set
 
 [GENERAL]
+mode=INT
 nice=10
 loglevel=INFO
 lightweight=on
@@ -8,17 +10,31 @@ ncores=12
 output=rsmpp_outputname
 overwrite=on
 
+[LTA]
+LTAfetch=off
+method=html
+htmlfile=html.txt
+n_simult_dwnlds=6
+missing_attempts=10
+delay=120
+savedir=/media/RAIDD/lofar_data/
+
 [DATA]
 obsids=to_process.py
 datadir=/media/RAIDD/lofar_data/
 bandsno=4
 subsinbands=10
-beams=0,1,2,3,4,5
-target_oddeven=odd
+targetbeams=0,1,2,3,4,5
 precalibrated=no
 precalibratedloc=DATA
+#INT Only
+target_oddeven=odd
+#SIM Only
+calibratorbeam=1
+remaindersubbands=4
 
 [PROCESSING]
+rficonsole=on
 autoflag=on
 postcut=0
 PHASEONLY=off
@@ -55,3 +71,4 @@ maxbaseline=3.0
 mask=off
 mosaic=off
 avgpbrad=0.5
+ncpmode=off
