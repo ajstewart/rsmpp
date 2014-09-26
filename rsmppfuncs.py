@@ -1,4 +1,4 @@
-#Version 2.10
+#Version 2.2.0
 
 import os, subprocess,time, multiprocessing, glob, datetime, pyfits, logging, sys
 import numpy as np

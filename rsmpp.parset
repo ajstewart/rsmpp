@@ -1,4 +1,5 @@
 #True false values can be represented by on/off, 1/0, true/false, yes/no
+#Some [DATA] arguments are not valid for a particular mode but should still be set
 
 [GENERAL]
 mode=INT
@@ -24,14 +25,16 @@ datadir=/media/RAIDD/lofar_data/
 bandsno=4
 subsinbands=10
 targetbeams=0,1,2,3,4,5
-target_oddeven=odd
 precalibrated=no
 precalibratedloc=DATA
+#INT Only
+target_oddeven=odd
+#SIM Only
 calibratorbeam=1
 remaindersubbands=4
 
 [PROCESSING]
-rficonsole=off
+rficonsole=on
 autoflag=on
 postcut=0
 PHASEONLY=off

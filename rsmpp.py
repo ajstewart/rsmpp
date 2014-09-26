@@ -9,7 +9,7 @@
 
 #Written by Adam Stewart, Last Update September 2014
 
-#---Version 2.1.0---
+#---Version 2.2.0---
 
 import subprocess, multiprocessing, os, glob, optparse, sys, datetime, string, getpass, time, logging, ConfigParser, base64
 from functools import partial
@@ -19,7 +19,7 @@ from itertools import izip
 import numpy as np
 #import stuff for email
 import emailslofar as em
-vers="2.1.0"	#Current version number
+vers="2.2.0"	#Current version number
 
 import rsmpp_hbafuncs as rsmhbaf
 import rsmppfuncs as rsmshared
@@ -1084,7 +1084,7 @@ Pipeline now stopping...".format(i, data_dir))
 				pool.map(create_mosaic_multi, target_obs)
 				for i in target_obs:
 					os.chdir(os.path.join(i, "images"))
-					subprocess.call("mv *mosaic* mosaics/", shell=True)
+					subprocess.call("mv *_mosaic* mosaics/", shell=True)
 					os.chdir("../..")
 				
 		#----------------------------------------------------------------------------------------------------------------------------------------------
