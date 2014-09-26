@@ -21,7 +21,6 @@ import numpy as np
 import emailslofar as em
 vers="2.2.0"	#Current version number
 
-import rsmpp_hbafuncs as rsmhbaf
 import rsmppfuncs as rsmshared
 
 mainrootpath=os.path.realpath(__file__)
