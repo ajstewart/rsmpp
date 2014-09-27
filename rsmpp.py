@@ -1010,7 +1010,7 @@ Pipeline now stopping...".format(i, data_dir))
 			log.info("Final concatenate process started...")
 			for be in beams:
 			# 	# snapshot_concat_multi=partial(rsmshared.snapshot_concat, beam=be)	#Currently cannot combine all bands in a snapshot (different number of subands)
-				final_concat_multi=partial(rsmhbaf.final_concat, beam=be, target_obs=target_obs, correct=correct)
+				final_concat_multi=partial(rsmshared.hba_final_concat, beam=be, target_obs=target_obs, correct=correct)
 				if __name__ == '__main__':
 					worker_pool.map(final_concat_multi, rsm_band_numbers)
 
