@@ -389,7 +389,7 @@ else:
 If you would like to automatically fetch the calibrator skymodel set the calmodel option to 'AUTO'.\nPipeline now stopping...".format(skymodel))
 		sys.exit()
 	else:
-		create_sky=False	
+		create_cal=False	
 
 #LTA checks
 if lta:
