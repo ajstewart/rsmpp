@@ -1,4 +1,4 @@
-#Version 2.2.0
+#Version 2.3.0
 
 import os, subprocess,time, multiprocessing, glob, datetime, pyfits, logging, sys
 import numpy as np
@@ -65,6 +65,19 @@ def organise(SB):
 def deletefile(file):
 	"""Only files not directories"""
 	os.remove(file)
+
+def fetchantenna():
+	log.info("Fetching fixinfo file...")
+	try:
+		subprocess.call("wget http://www.astron.nl/sites/astron.nl/files/cms/fixinfo.tar > /dev/null 2>&1", shell=True)
+		subprocess.call("tar xvf fixinfo.tar > /dev/null 2>&1", shell=True)
+		return True
+	except:
+		return False
+	
+def correctantenna(ms):
+	log.info("Correcting Antenna Table for {0}...".format(ms.split("/")[-1]))
+	subprocess.call("./fixbeaminfo {0} > /dev/null 2>&1".format(ms), shell=True)
 
 def clean(f):
 	"""Function to 'clean' a sky model. It removes double sources, A-team sources and replaces MSSS calibrators with MSSS calibrator models."""
@@ -143,13 +156,9 @@ def NDPPP_Initial(SB, wk_dir, ndppp_base, prec, precloc):
 	subprocess.call("NDPPP {0} > {1}/logs/ndppp.{2}.log 2>&1".format(ndppp_filename, curr_obs, curr_SB), shell=True)
 	os.remove(ndppp_filename)
 	
-def rficonsole(ms,mode, obsid):
-	if mode=="LBA":
-		strategy=tools["LBAdefault"]
-	else:
-		strategy=tools["HBAdefault"]
+def rficonsole(ms,obsid):
 	log.info("Running rficonsole on {0}...".format(ms))
-	subprocess.call("rficonsole -j 1 -strategy {0} {1} > {2}/logs/rficonsole.{3}.log 2>&1".format(strategy, ms, obsid, ms.split("/")[-1]), shell=True)
+	subprocess.call("rficonsole -j 1 {0} > {1}/logs/rficonsole.{2}.log 2>&1".format(ms, obsid, ms.split("/")[-1]), shell=True)
 
 def check_dataset(ms):
 	check=pt.table(ms, ack=False)
@@ -183,7 +192,36 @@ steps=[]".format(target, target.replace(".dppp.tmp", ".dppp")))
 		subprocess.call("rm -r {0}".format(target), shell=True)
 	subprocess.call("mv calibrate-stand-alone*log logs > logs/movecalibratelog.log 2>&1", shell=True)
 
-def rsm_bandsndppp(a, rsm_bands):
+# def create_ideal_rsm_bands(rsm_bands):
+# 	ideal={}
+# 	lastsb=-1
+# 	lastobs=""
+# 	for key in sorted(rsm_bands):
+# 		ideal[key]=[]
+# 		obs=key.split("_")[0]
+# 		#Account for non-sequential beams?
+# 		# beam=int(key.split("_")[1].split("SAP")[-1])
+# 		if obs!=lastobs:
+# 			lastsb=-1
+# 		for ms in rsm_bands[key]:
+# 			thissb=int(ms.split("SB")[-1][:3])
+# 			if lastsb==-1:
+# 				ideal[key].append(ms)
+# 				lastsb=thissb
+# 			elif (thissb-1) == lastsb:
+# 				ideal[key].append(ms)
+# 				lastsb=thissb
+# 			else:
+# 				numbermissing=thissb-lastsb
+# 				for s in xrange(numbermissing-1, 0, -1):
+# 					missingentry=ms.replace("SB{0:03d}".format(thissb), "SB{0:03d}".format(thissb-s))
+# 					ideal[key].append(missingentry)
+# 				ideal[key].append(ms)
+# 				lastsb=thissb
+# 		lastobs=obs
+# 	return ideal
+
+def rsm_bandsndppp(a, rsm_bands, phaseon):
 	"""
 	Function to combine together the sub bands into bands.
 	"""
@@ -193,21 +231,23 @@ def rsm_bandsndppp(a, rsm_bands):
 	b=current_obs+"_"+beamc
 	band=int(info[2])
 	# b_real=b+(beam*34)
+	datacol={"bands":"DATA", "subbands":"CORRECTED_DATA"}
+	fileend={"bands":".tmp", "subbands":""}
 	log.info("Combining {0} BAND{1}...".format(b, '%02d' % band))
 	filename="{0}_ndppp.band{1}.parset".format(b, '%02d' % band)
 	n=open(filename, "w")
 	n.write("msin={0}\n\
-msin.datacolumn=DATA\n\
+msin.datacolumn={4}\n\
 msin.baseline=[CR]S*&\n\
 msin.missingdata=True\n\
 msin.orderms=False\n\
-msout={1}/{2}_BAND{3}.MS.dppp.tmp\n\
-steps=[]".format(rsm_bands[a], current_obs, b,'%02d' % band))
+msout={1}/{2}_BAND{3}.MS.dppp{5}\n\
+steps=[]".format(rsm_bands[a], current_obs, b,'%02d' % band, datacol[phaseon], fileend[phaseon]))
 	n.close()
 	subprocess.call("NDPPP {0} > {1}/logs/{2}_BAND{3}.log 2>&1".format(filename,current_obs,b,'%02d' % band), shell=True)
 	os.remove(filename)
 	
-def calibrate_msss2(target, phaseparset, flag, toflag, autoflag, create_sky, skymodel):
+def calibrate_msss2(target, phaseparset, autoflag, saveflag, create_sky, skymodel, phaseon):
 	"""
 	Function for the second half of MSSS style calibration - it performs a phase-only calibration and the auto flagging \
 	if selected.
@@ -220,20 +260,23 @@ def calibrate_msss2(target, phaseparset, flag, toflag, autoflag, create_sky, sky
 		skymodel="parsets/{0}.skymodel".format(beam)
 	log.info("Performing phase only calibration on {0}...".format(target))
 	subprocess.call("calibrate-stand-alone -f {0} {1} {2} > {3}/logs/calibrate_phase_{4}.txt 2>&1".format(target, phaseparset, skymodel, curr_obs, name), shell=True)
-	if flag==True:
-		local_toflag=toflag
-		if autoflag==True:
-			final_toflag=flagging(target, local_toflag)[:-1]
-		log.info("Flagging baselines: {0} from {1}".format(final_toflag, target))
+	if autoflag:
+		if saveflag:
+			log.info("Saving {0} before autoflag...".format(name))
+			subprocess.call("cp -r {0} {1}".format(target, os.path.join(curr_obs, "preflagged")), shell=True)
+		final_toflag=flagging(target)
+		log.info("Flagging baselines: {0} from {1}".format(",".join(final_toflag), target))
+		ndpppflag(target, final_toflag, False)
+	# subprocess.call('msselect in={0} out={1} baseline=\'{2}\' deep=true > {3}/logs/msselect.log 2>&1'.format(target, target.replace(".tmp", ""), final_toflag, curr_obs), shell=True)
+	if phaseon=="bands":
+		subprocess.call('mv {0} {1} > /dev/null 2>&1'.format(target, target.replace(".tmp", "")), shell=True)
 	else:
-		final_toflag=""
-	subprocess.call('msselect in={0} out={1} baseline=\'{2}\' deep=true > {3}/logs/msselect.log 2>&1'.format(target, target.replace(".tmp", ""), final_toflag, curr_obs), shell=True)
+		subprocess.call('mv {0} {1} > /dev/null 2>&1'.format(target, target.replace(".phasecaltmp", "")), shell=True)
 	subprocess.call("mv calibrate-stand-alone*log logs > logs/movecalibratelog.log 2>&1", shell=True)
-	if os.path.isdir(target.replace(".tmp", "")):
-		subprocess.call("rm -rf {0}".format(target), shell=True)
+	# if os.path.isdir(target.replace(".tmp", "")):
+		# subprocess.call("rm -rf {0}".format(target), shell=True)
 
-
-def standalone_phase(target, phaseparset, flag, toflag, autoflag, create_sky, skymodel, phaseoutput, phasecolumn):
+def standalone_phase(target, phaseparset, autoflag, saveflag, create_sky, skymodel, phaseoutput, phasecolumn):
 	"""
 	Simply shifts the CORRECTED_DATA to a new measurement set DATA column.
 	"""
@@ -257,21 +300,21 @@ steps=[]".format(target, phasecolumn))
 		skymodel="parsets/{0}.skymodel".format(beam)
 	log.info("Performing phase only calibration on {0}...".format(target))
 	subprocess.call("calibrate-stand-alone -f {0} {1} {2} > {3}/logs/calibrate_standalone_phase_{4}.txt 2>&1".format(target, phaseparset, skymodel, curr_obs, target_name), shell=True)
-	if flag:
-		local_toflag=toflag
-		if autoflag:
-			final_toflag=flagging(target, local_toflag)[:-1]
-		log.info("Flagging baselines: {0} from {1}".format(final_toflag, target))
-	else:
-		final_toflag=""
-	subprocess.call('msselect in={0} out={1} baseline=\'{2}\' deep=true > {3}/logs/msselect_phaseonly.log 2>&1'.format(target, os.path.join(curr_obs, phaseoutput,target_name+".PHASEONLY"),final_toflag,curr_obs), shell=True)
+	if autoflag:
+		if saveflag:
+			log.info("Saving {0} before autoflag...")
+			subprocess.call("cp -r {0} {1}".format(target, os.path.join(curr_obs, phaseoutput, "preflagged")), shell=True)
+		final_toflag=flagging(target)
+		log.info("Flagging baselines: {0} from {1}".format(",".join(final_toflag), target))
+		ndpppflag(target, final_toflag, False)
+	# subprocess.call('msselect in={0} out={1} baseline=\'{2}\' deep=true > {3}/logs/msselect_phaseonly.log 2>&1'.format(target, os.path.join(curr_obs, phaseoutput,target_name+".PHASEONLY"),final_toflag,curr_obs), shell=True)
+	subprocess.call('mv {0} {1} > /dev/null 2>&1'.format(target, os.path.join(curr_obs, phaseoutput,target_name+".PHASEONLY")), shell=True)
 	subprocess.call("mv calibrate-stand-alone*log logs > logs/movecalibratelog.log 2>&1", shell=True)
-	if os.path.isdir(os.path.join(curr_obs, phaseoutput,target_name+".PHASEONLY")):
-		subprocess.call("rm -rf {0}".format(target), shell=True)
+	# if os.path.isdir(os.path.join(curr_obs, phaseoutput,target_namhe+".PHASEONLY")):
+		# subprocess.call("rm -rf {0}".format(target), shell=True)
 	subprocess.call("mv {0}*.pdf {0}*.stats {0}*.tab {1}/flagging/".format(target, curr_obs), shell=True)
 
-
-def flagging(target, local_toflag):
+def flagging(target):
 	"""
 	A function which copies the auto detection of bad stations developed during MSSS.
 	"""
@@ -279,13 +322,43 @@ def flagging(target, local_toflag):
 	subprocess.call('{0} -i {1} -r {2}/ > {2}/logs/asciistats.log 2>&1'.format(tools["ascii"], target, target.split("/")[0]), shell=True)
 	subprocess.call('{0} -i {1}.stats -o {1} > logs/statsplot.log 2>&1'.format(tools["stats"], target), shell=True)
 	stats=open('{0}.tab'.format(target), 'r')
+	baselines=[]
 	for line in stats:
 		if line.startswith('#')==False:
 			cols=line.rstrip('\n').split('\t')
 			if cols[12] == 'True':
-				if cols[12] not in local_toflag:
-					local_toflag+=('!'+cols[1]+';')
-	return local_toflag
+				baselines.append(cols[1])
+	return baselines
+
+def ndpppflag(MS, blines, cobalt):
+	msname=MS.split("/")[-1]
+	obs=msname.split("_")[0]
+	parset_name="{0}_flag.parset".format(msname)
+	if cobalt:
+		column="DATA"
+	else:
+		column="CORRECTED_DATA"
+	f=open(parset_name, 'w')
+	f.write("msin={0}\n\
+msin.datacolumn={1}\n\
+msout=\n\
+\n\
+steps=[flag]\n\
+\n\
+flag.type=preflagger\n\
+flag.baseline={2}\n".format(MS, column, blines))
+	f.close()
+	logname="{0}_flag_log.txt".format(msname)
+	if cobalt:
+		subprocess.call("NDPPP {0} > {1}/logs/ndppp_cobalt_station_flagging_{2}.txt 2>&1".format(parset_name,obs,logname), shell=True)
+	else:
+		subprocess.call("NDPPP {0} > {1}/logs/ndppp_station_flagging_{2}.txt 2>&1".format(parset_name,obs,logname), shell=True)
+	os.remove(parset_name)
+	
+def cobalt_flag(MS):
+	blines=flagging(MS)
+	log.info("Flagging baselines: {0} from {1}".format(",".join(blines), MS.split("/")[-1]))
+	ndpppflag(MS, blines, True)
 
 def peeling_steps(SB, shortpeel, peelsources, peelnumsources, fluxlimit, skymodel, create_sky):
 	"""
@@ -581,7 +654,7 @@ correct_lofarroot={'/opt/share/lofar-archive/2013-06-20-19-15/LOFAR_r23543_10c8b
 #																HBA Funcs
 #----------------------------------------------------------------------------------------------------------------------------------------------
 
-def hba_check_targets(i, beam, targets, targets_corrupt, rsm_bands, rsm_band_numbers, rsm_bands_lens, missing_calibrators, data_dir, diff, missingfile, subsinbands):
+def hba_check_targets(i, beam, targets, targets_corrupt, rsm_bands, rsm_band_numbers, rsm_bands_lens, missing_calibrators, data_dir, diff, missingfile, subsinbands, ideal_bands):
 	"""
 	Checks all target observations, works out if any are missing and then organises into bands.
 	"""
@@ -592,8 +665,7 @@ def hba_check_targets(i, beam, targets, targets_corrupt, rsm_bands, rsm_band_num
 	targets[i][beamselect]=sorted(glob.glob(targlob))
 	log.debug(targets[i][beamselect])
 	if len(targets[i][beamselect])<1:
-		log.critical("Cannot find any beam SAP00{0} measurement sets in directory {1} - please check that this beam\
-		is not missing".format(beam, os.path.join(data_dir,i)))
+		log.critical("Cannot find any beam SAP00{0} measurement sets in directory {1} - please check files are present or remove beam".format(beam, os.path.join(data_dir,i)))
 		sys.exit()
 	targets_first=int(targets[i][beamselect][0].split('SB')[1][:3])
 	targets_last=int(targets[i][beamselect][-1].split('SB')[1][:3])
@@ -601,11 +673,15 @@ def hba_check_targets(i, beam, targets, targets_corrupt, rsm_bands, rsm_band_num
 	temp=[]
 	toremove=[]
 	for bnd in rsm_band_numbers:
-		rsm_bands["{0}_{1}_{2}".format(i, beamselect, bnd)]=[]
+		thiskey="{0}_{1}_{2}".format(i, beamselect, bnd)
+		rsm_bands[thiskey]=[]
+		ideal_bands[thiskey]=["{0}/{0}_{1}_SB{2:03d}_uv.MS.dppp".format(i, beamselect, h) for h in target_range[bnd*subsinbands:(bnd+1)*subsinbands]]
+		log.debug("Ideal {0} Band {1}: {2}".format(i, bnd, ideal_bands[thiskey]))
 	for t in targets[i][beamselect]:
 		target_msname=t.split("/")[-1]
 		try:
 			test=pt.table(t, ack=False)
+			test.close()
 		except:
 			log.warning("Target {0} is corrupt!".format(target_msname))
 			time.sleep(1)
@@ -695,7 +771,7 @@ def hba_final_concat(band, beam, target_obs, correct):
 #																LBA Funcs
 #----------------------------------------------------------------------------------------------------------------------------------------------
 
-def lba_check_targets(i, beam, targets, targets_corrupt, rsm_bands, rsm_band_numbers, rsm_bands_lens, missing_calibrators, data_dir, diff, missingfile, subsinbands, calibbeam):
+def lba_check_targets(i, beam, targets, targets_corrupt, rsm_bands, rsm_band_numbers, rsm_bands_lens, missing_calibrators, data_dir, diff, missingfile, subsinbands, calibbeam, ideal_bands):
 	"""
 	Checks all target observations, works out if any are missing and then organises into bands.
 	"""
@@ -705,7 +781,7 @@ def lba_check_targets(i, beam, targets, targets_corrupt, rsm_bands, rsm_band_num
 	targlob=os.path.join(data_dir,i,"*{0}*.MS.dppp".format(beamselect))
 	targets[i][beamselect]=sorted(glob.glob(targlob))
 	if len(targets[i][beamselect])<1:
-		log.critical("Cannot find any measurement sets in directory {0} !".format(os.path.join(data_dir,i)))
+		log.critical("Cannot find any measurement sets in directory {0} - please check files are present or remove beam.".format(os.path.join(data_dir,i)))
 		sys.exit()
 	targets_first=int(targets[i][beamselect][0].split('SB')[1][:3])
 	targets_last=int(targets[i][beamselect][-1].split('SB')[1][:3])
@@ -713,11 +789,18 @@ def lba_check_targets(i, beam, targets, targets_corrupt, rsm_bands, rsm_band_num
 	temp=[]
 	toremove=[]
 	for bnd in rsm_band_numbers:
-		rsm_bands["{0}_{1}_{2}".format(i, beamselect, bnd)]=[]
+		thiskey="{0}_{1}_{2}".format(i, beamselect, bnd)
+		rsm_bands[thiskey]=[]
+		if bnd!= rsm_band_numbers[-1]:
+			ideal_bands[thiskey]=["{0}/{0}_{1}_SB{2:03d}_uv.MS.dppp".format(i, beamselect, h) for h in target_range[bnd*subsinbands:(bnd+1)*subsinbands]]
+		else:
+			ideal_bands[thiskey]=["{0}/{0}_{1}_SB{2:03d}_uv.MS.dppp".format(i, beamselect, h) for h in target_range[bnd*subsinbands:]]
+		log.debug("Ideal {0} Band {1}: {2}".format(i, bnd, ideal_bands[thiskey]))
 	for t in targets[i][beamselect]:
 		target_msname=t.split("/")[-1]
 		try:
 			test=pt.table(t, ack=False)
+			test.close()
 		except:
 			log.warning("Target {0} is corrupt!".format(target_msname))
 			time.sleep(1)

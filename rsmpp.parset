@@ -34,13 +34,17 @@ calibratorbeam=1
 remaindersubbands=4
 
 [PROCESSING]
+phase-cal-on=bands ; select to perform phase cal on 'bands' or 'subbands'.
+concat-bands=on ; if phase cal is only performed on sub bands - this option selects whether to concatenate the bands after or not.
+cobalt-flag=off
 rficonsole=on
 autoflag=on
+save-preflag=off
 postcut=0
 PHASEONLY=off
 phaseonly_name=phase_only_run
 phaseonly_col=CORRECTED_DATA
-phaseonly_bands=??
+phaseonly_selection=L*BAND??*.dppp
 
 [PARSETS]
 ndppp=parsets/ndppp.1.initial.parset
