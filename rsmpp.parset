@@ -67,9 +67,10 @@ peelingshort=off
 
 [IMAGING]
 imaging=off
-automaticthresh=off
-initialiter=500
-bandrms=0.053,0.038,0.035,0.028
+imagingmode=auto
+toimage=obsbands
+rsminitialiter=500
+rsmbandrms=0.053,0.038,0.035,0.028
 maxbunit=UV
 maxbaseline=3.0
 mask=off

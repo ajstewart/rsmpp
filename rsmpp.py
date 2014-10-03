@@ -9,7 +9,7 @@
 
 #Written by Adam Stewart, Last Update September 2014
 
-#---Version 2.3.0---
+#---Version 2.4.0---
 
 import subprocess, multiprocessing, os, glob, optparse, sys, string, getpass, time, logging, ConfigParser, base64
 from functools import partial
@@ -21,7 +21,7 @@ from itertools import izip
 import numpy as np
 #import stuff for email
 import emailslofar as em
-vers="2.3.0"	#Current version number
+vers="2.4.0"	#Current version number
 
 import rsmppfuncs as rsmshared
 
@@ -153,15 +153,17 @@ group.add_option("-c", "--peelsources", action="store", type="string", dest="pee
 parser.add_option_group(group)
 group = optparse.OptionGroup(parser, "Imaging Options:")
 group.add_option("-i", "--imaging", action="store_true", dest="imaging", default=config.getboolean("IMAGING", "imaging"),help="Set whether you wish the data to be imaged. [default: %default]")
-group.add_option("-A", "--automaticthresh", action="store_true", dest="automaticthresh", default=config.getboolean("IMAGING", "automaticthresh"),help="Switch on automatic threshold method of cleaning [default: %default]")
-group.add_option("-I", "--initialiter", action="store", type="int", dest="initialiter", default=config.getint("IMAGING", "initialiter"),help="Define how many cleaning iterations should be performed in order to estimate the threshold [default: %default]")
-group.add_option("-R", "--bandrms", action="store", type="string", dest="bandrms", default=config.get("IMAGING", "bandrms"),help="Define the prior level of expected band RMS for use in automatic cleaning, enter as '0.34,0.23,..' no spaces, in units of Jy [default: %default]")
+group.add_option("--imagingmode", action="store", type="choice", choices=['parset', 'auto', 'rsm'], dest="imagingmode", default=config.get("IMAGING", "imagingmode"),help="Choose which imaging mode to use: 'parset', 'auto' or 'rsm'. [default: %default]")
+group.add_option("--toimage", action="store", type="choice", choices=['obsbands', 'finalbands', 'both'], dest="toimage", default=config.get("IMAGING", "toimage"),help="Choose which datasets to image: 'obsbands', 'finalbands' or 'both'. [default: %default]")
+# group.add_option("-A", "--automaticthresh", action="store_true", dest="automaticthresh", default=config.getboolean("IMAGING", "automaticthresh"),help="Switch on automatic threshold method of cleaning [default: %default]")
+group.add_option("-I", "--rsminitialiter", action="store", type="int", dest="initialiter", default=config.getint("IMAGING", "rsminitialiter"),help="Define how many cleaning iterations should be performed in order to estimate the threshold [default: %default]")
+group.add_option("-R", "--rsmbandrms", action="store", type="string", dest="bandrms", default=config.get("IMAGING", "rsmbandrms"),help="Define the prior level of expected band RMS for use in automatic cleaning, enter as '0.34,0.23,..' no spaces, in units of Jy [default: %default]")
 group.add_option("-U", "--maxbunit", action="store", type="choice", dest="maxbunit", choices=['UV', 'm',], default=config.get("IMAGING", "maxbunit"),help="Choose which method to limit the baselines, enter 'UV' for UVmax (in klambda) or 'm' for physical length (in metres) [default: %default]")
 group.add_option("-L", "--maxbaseline", action="store", type="int", dest="maxbaseline", default=config.getfloat("IMAGING", "maxbaseline"),help="Enter the maximum baseline to image out to, making sure it corresponds to the unit options [default: %default]")
 group.add_option("-m", "--mask", action="store_true", dest="mask", default=config.getboolean("IMAGING", "mask"), help="Use option to use a mask when cleaning [default: %default]")
 group.add_option("-M", "--mosaic", action="store_true", dest="mosaic", default=config.getboolean("IMAGING", "mosaic"),help="Use option to produce snapshot, band, mosaics after imaging [default: %default]")
 group.add_option("--avgpbradius", action="store", type="float", dest="avgpbrad", default=config.get("IMAGING", "avgpbrad"),help="Choose radius for which avgpbz.py trims the primary beam when mosaicing [default: %default]")
-group.add_option("--ncpmode", action="store_true", dest="ncp", default=config.get("IMAGING", "ncpmode"),help="Turn this option on when mosaicing the North Celestial Pole [default: %default]")
+group.add_option("--ncpmode", action="store_true", dest="ncp", default=config.getboolean("IMAGING", "ncpmode"),help="Turn this option on when mosaicing the North Celestial Pole [default: %default]")
 parser.add_option_group(group)
 (options, args) = parser.parse_args()
 
@@ -244,7 +246,8 @@ precalloc=options.precalibloc	#precalibrated data location
 autoflag=options.autoflag	#autoflagging on or off
 saveflag=options.saveflag	#save the output prior to autoflag
 imaging_set=options.imaging	#if imaging is to be performed
-automaticthresh=options.automaticthresh	#if the automated imaging threshold strategy should be used
+imagingmode=options.imagingmode	#which imaging mode to be used
+# automaticthresh=options.automaticthresh	#if the automated imaging threshold strategy should be used
 initialiters=options.initialiter #Initial imaging iterations
 bandthreshs=options.bandrms	#the band thresholds
 maxbunit=options.maxbunit.upper()	#unit of maximum baseline lenght (UV or M)
@@ -288,6 +291,7 @@ ltacores=options.ltacores #number of downloads
 ltameth=options.ltameth #htmlorsrc
 rfi=options.rfi
 ncp=options.ncp
+setstoimage=options.toimage
 mode="UNKNOWN"
 
 #Now gather the ids that will be run, either from a file or if not a text input.
@@ -331,7 +335,7 @@ if imaging_set:
 Pipeline now stopping...")
 		sys.exit()
 	#if automatic method we then need to check we have the correct number of band thresholds
-	if automaticthresh:
+	if imagingmode=='rsm':
 		tempbandsthresh=bandthreshs.split(",")
 		if len(tempbandsthresh) < bandsno:
 			log.critical("Number of thresholds given is less than the number of bands")
@@ -532,6 +536,10 @@ else:
 		subprocess.call(["cp","-r","../to_process.py", "."])
 	if not os.path.isdir('logs'):
 		os.mkdir('logs')
+	if mastermode=="INT":
+		if not os.path.isdir('final_datasets'):
+			os.mkdir('final_datasets')
+			os.mkdir('final_datasets/logs')
 	#copy over parset file used
 	subprocess.call(["cp",os.path.join("..", config_file), config_file+"_used"])
 	if lta:
@@ -1070,7 +1078,7 @@ Pipeline now stopping...".format(i, data_dir))
 		
 		log.info("Performing phaseonly calibration (and flagging if selected) on all sets...")
 		# calibrate step 2 process
-		# tocalibrate=sorted(glob.glob("L*/L*_SAP00?_BAND*.MS.dppp.tmp"))
+		tocalibrate=sorted(glob.glob("L*/L*_SAP00?_BAND*.MS.dppp.tmp"))
 		calibrate_msss2_multi=partial(rsmshared.calibrate_msss2, phaseparset=phaseparset, autoflag=autoflag, saveflag=saveflag, create_sky=create_sky, skymodel=skymodel, phaseon=phaseon)
 		if __name__ == '__main__':
 			worker_pool.map(calibrate_msss2_multi, tocalibrate)
@@ -1109,12 +1117,12 @@ Pipeline now stopping...".format(i, data_dir))
 		#----------------------------------------------------------------------------------------------------------------------------------------------
 		#																Final Concat Step for MSSS style
 		#----------------------------------------------------------------------------------------------------------------------------------------------
-		if mastermode=="INT":
-			correct=nchans*subsinbands
+		if len(target_obs)>1:
+			# correct=nchans*subsinbandss
 			log.info("Final concatenate process started...")
 			for be in beams:
 			# 	# snapshot_concat_multi=partial(rsmshared.snapshot_concat, beam=be)	#Currently cannot combine all bands in a snapshot (different number of subands)
-				final_concat_multi=partial(rsmshared.hba_final_concat, beam=be, target_obs=target_obs, correct=correct)
+				final_concat_multi=partial(rsmshared.hba_final_concat, beam=be, target_obs=target_obs)
 				if __name__ == '__main__':
 					worker_pool.map(final_concat_multi, rsm_band_numbers)
 
@@ -1130,12 +1138,23 @@ Pipeline now stopping...".format(i, data_dir))
 				# print awimager_environ
 			else:
 				awimager_environ=os.environ.copy()
-			
-			# globterms=["L*/L*BAND*.MS.dppp", "SAP00*BAND*_FINAL.MS"]		
-			toimage=sorted(glob.glob("L*/L*BAND*.MS.dppp"))
+			if setstoimage=="both":
+				toimage=sorted(glob.glob("*/*BAND*.MS.dppp"))
+			elif setstoimage=="obsbands":
+				toimage=sorted(glob.glob("L*/L*BAND*.MS.dppp"))
+			else:
+				toimage=sorted(glob.glob("final_datasets/*BAND*.MS.dppp"))
 			log.info("Starting imaging process with AWimager...")
+			log.info("Imaging mode: {0}".format(imagingmode))
+			log.info("Imaging: {0}".format(setstoimage))
+			if imagingmode=="auto":
+				imagingparset, maxb=rsmshared.awroughparset(toimage, bandsno, "vlss", mode)
+				maxbunit="UV"
+				initialiters=500
+			else:
+				imagingparset="parsets/aw.parset"
 			#Need to create sky model data
-			image_file=open("parsets/aw.parset", 'r')
+			image_file=open(imagingparset, 'r')
 			aw_sets=image_file.readlines()
 			image_file.close()
 			aw_sets=[setting.replace(" ", "") for setting in aw_sets]
@@ -1163,7 +1182,7 @@ Pipeline now stopping...".format(i, data_dir))
 				create_mask_multi=partial(rsmshared.create_mask, mask_size=mask_size, toimage=toimage)
 				if __name__ == '__main__':
 					worker_pool.map(create_mask_multi,beams)
-			AW_Steps_multi=partial(rsmshared.AW_Steps, aw_sets=aw_sets, maxb=maxb, aw_env=awimager_environ, niter=niters, automaticthresh=automaticthresh,
+			AW_Steps_multi=partial(rsmshared.AW_Steps, aw_sets=aw_sets, maxb=maxb, aw_env=awimager_environ, niter=niters, imagingmode=imagingmode,
 			bandsthreshs_dict=bandsthreshs_dict, initialiter=initialiters, uvORm=maxbunit, usemask=mask, userthresh=userthresh, mos=mosaic)
 			if __name__ == '__main__':
 				pool = Pool(processes=2)
@@ -1172,20 +1191,26 @@ Pipeline now stopping...".format(i, data_dir))
 			log.info("Done!")
 
 			log.info("Tidying up imaging...")
-			for i in target_obs:
+			if setstoimage=="obsbands":
+				imagetargetobs=target_obs
+			elif setstoimage=="finalbands":
+				imagetargetobs=["final_datasets"]
+			else:
+				imagetargetobs=target_obs+["final_datasets"]
+			for i in imagetargetobs:
 				os.chdir(i)
 				os.mkdir("images")
-				subprocess.call("mv *.fits images", shell=True)
-				subprocess.call("mv *.model *.residual *.psf *.restored *.avgpb *.img0.spheroid_cut* *.corr images", shell=True)
+				subprocess.call("mv *.fits images/", shell=True)
+				subprocess.call("mv *.model *.residual *.psf *.restored *.avgpb *.img0.spheroid_cut* *.corr images/", shell=True)
 				os.chdir("..")
 			log.info("Creating averaged images...")
 			average_band_images_multi=partial(rsmshared.average_band_images, beams=beams)
 			if __name__=='__main__':
-				worker_pool.map(average_band_images_multi, target_obs)
+				worker_pool.map(average_band_images_multi, imagetargetobs)
 			if mosaic:
 				create_mosaic_multi=partial(rsmshared.create_mosaic, band_nums=rsm_band_numbers, chosen_environ=chosen_environ, pad=userpad, avgpbr=avpbrad, ncp=ncp)
 				pool=Pool(processes=len(rsm_band_numbers))
-				pool.map(create_mosaic_multi, target_obs)
+				pool.map(create_mosaic_multi, imagetargetobs)
 				pool.close()
 				for i in target_obs:
 					os.chdir(os.path.join(i, "images"))
@@ -1200,8 +1225,6 @@ Pipeline now stopping...".format(i, data_dir))
 		log.info("Tidying up...")
 		worker_pool.close()
 		if mastermode=="INT":
-			os.mkdir("final_datasets")
-			subprocess.call("mv SAP00*BAND*_FINAL.MS.dppp final_datasets > /dev/null 2>&1", shell=True)
 			if not precal:
 				for c in calib_obs:
 					subprocess.call("mkdir {0}/datasets {0}/parmdb_tables > /dev/null 2>&1".format(c), shell=True)

@@ -1,4 +1,4 @@
-#Version 2.3.0
+#Version 2.4.0
 
 import os, subprocess,time, multiprocessing, glob, datetime, pyfits, logging, sys
 import numpy as np
@@ -464,7 +464,7 @@ def create_mask(beam, mask_size, toimage):
 		subprocess.call("{0} {1} {2}.temp > logs/msss_mask.log 2>&1".format(tools["msssmask"], mask, skymodel), shell=True)
 		subprocess.call(["rm", "-r", "{0}.temp".format(skymodel)])
 
-def AW_Steps(g, aw_sets, maxb, aw_env, niter, automaticthresh, bandsthreshs_dict, initialiter, uvORm, userthresh, usemask, mos):
+def AW_Steps(g, aw_sets, maxb, aw_env, niter, imagingmode, bandsthreshs_dict, initialiter, uvORm, userthresh, usemask, mos):
 	"""
 	Performs imaging with AWimager using user supplied settings.
 	"""
@@ -473,7 +473,10 @@ def AW_Steps(g, aw_sets, maxb, aw_env, niter, automaticthresh, bandsthreshs_dict
 		logname=g.split("/")[-1]
 	else:
 		logname=g
-	obsid=logname.split("_")[0]
+	if g.find("FINAL"):
+		obsid="final_datasets"
+	else:
+		obsid=logname.split("_")[0]
 	ft = pt.table(g+'/SPECTRAL_WINDOW', ack=False)
 	freq = ft.getcell('REF_FREQUENCY',0)
 	wave_len=c/freq
@@ -491,15 +494,19 @@ def AW_Steps(g, aw_sets, maxb, aw_env, niter, automaticthresh, bandsthreshs_dict
 	beamc="SAP00{0}".format(beam)
 	finish_iters=niter
 	aw_parset_name="aw_{0}.parset".format(g.split("/")[-1])
-	if automaticthresh:
+	if imagingmode=="rsm" or imagingmode=="auto":
 		# finish_iters+=initialiter
 		curr_band=g.split("BAND")[1][:2]
+		if imagingmode=="rsm":
+			thisthreshold=6.*bandsthreshs_dict[curr_band]
+		else:
+			thisthreshold=0.0
 		local_parset=open(aw_parset_name, 'w')
 		local_parset.write("\nms={0}\n\
 image={0}.img\n\
 niter={1}\n\
 threshold={2}Jy\n\
-UVmax={3}\n".format(g, initialiter, 6.*bandsthreshs_dict[curr_band],UVmax))
+UVmax={3}\n".format(g, initialiter,thisthreshold,UVmax))
 		if usemask:
 			mask="parsets/{0}.mask".format(beamc)
 			local_parset.write("mask={0}\n".format(mask))
@@ -510,14 +517,17 @@ UVmax={3}\n".format(g, initialiter, 6.*bandsthreshs_dict[curr_band],UVmax))
 		subprocess.call("awimager {0} > {1}/logs/awimager_{2}_initial_log.txt 2>&1".format(aw_parset_name, obsid, logname), env=aw_env, shell=True)
 		subprocess.call("image2fits in={0}.img.residual out={0}.img.fits > {1}/logs/image2fits.log 2>&1".format(g, obsid), shell=True)
 		try:
-			thresh=2.5*(getimgstd("{0}.img.fits".format(g)))
+			if imagingmode=='rsm':
+				thresh=2.5*(getimgstd("{0}.img.fits".format(g)))
+			else:
+				thresh=5.0*(getimgstd("{0}.img.fits".format(g)))
 		except:
 			log.error("FITS {0}.img.fits could not be found!".format(g))
 			return
 		os.remove("{0}.img.fits".format(g))
 	else:
 		thresh=userthresh
-	log.info("Cleaning {0} to threshold of {1}...".format(g, thresh))
+	log.info("Cleaning {0} to threshold of {1:.02f}...".format(g, thresh))
 	local_parset=open(aw_parset_name, 'w')
 	local_parset.write("\nms={0}\n\
 image={0}.img\n\
@@ -536,6 +546,88 @@ UVmax={3}\n".format(g, finish_iters, thresh, UVmax))
 		subprocess.call("cp -r {0}.img0.avgpb {0}.img_mosaic0.avgpb".format(g), shell=True)
 	subprocess.call("addImagingInfo {0}.img.restored.corr '' 0 {3} {0} > {1}/logs/addImagingInfo_{2}_log.txt 2>&1".format(g, obsid, logname, localmaxb), shell=True)
 	os.remove(aw_parset_name)
+
+def wavelength(f):
+	return 299792458./f
+	
+def getbaseline(wlen, res):
+	rawbline=(0.8*wlen)/res
+	return round(rawbline/100.0)*100.0
+
+def FWHM(l, D):
+	return 1.3*(180./np.pi)*(l/D)
+	
+def FoV(FW):
+	return np.pi * (FW/2.)*(FW/2.)
+	
+def params(llow, lhigh, D, bl, fovl, fovh):
+	cellsize=(lhigh / bl) * (180./np.pi) * 3600. / 3.
+	w=round(bl / 1000.) * 1000.
+	Num=3. * bl / D
+	return cellsize, w, Num
+
+def awroughparset(toimage, bands, res, mode):
+	#Set the station diameters and desired resolution table
+	station_diams={"HBA":30.75, "LBA":32.25}
+	resolution={"vlss":np.deg2rad(80./60./60.)}
+	#Obtain the frequency/wavelength range
+	lfreqms=[ms for ms in toimage if "BAND{0:02d}".format(range(bands)[0]) in ms][0]
+	ft = pt.table(lfreqms+'/SPECTRAL_WINDOW', ack=False)
+	lfreq = float(ft.getcell('REF_FREQUENCY',0))
+	ft.close()
+	if bands>1:
+		hfreqms=[ms for ms in toimage if "BAND{0:02d}".format(range(bands)[-1]) in ms][0]
+		ft = pt.table(hfreqms+'/SPECTRAL_WINDOW', ack=False)
+		hfreq = float(ft.getcell('REF_FREQUENCY',0))
+		ft.close()
+	else:
+		hfreq=lfreq
+	l_high=wavelength(hfreq)
+	l_low=wavelength(lfreq)
+	log.info("Wavelength range is {0:.02f}m - {1:.02f}m".format(l_low, l_high))
+	m_wave=(l_high+l_low)/2.
+	#Calculate baseline length for resolution at middle frequency
+	wantedres=resolution[res]
+	resbaseline=getbaseline(m_wave, wantedres)
+	#In terms of UV
+	uv_max=resbaseline/m_wave/1e3
+	log.info("Using a UVmax of {0:.02f} to achieve a resolution of ~80\"".format(uv_max))
+	#Getting FWHM and FoV details to determine image size
+	diam=station_diams[mode]
+	fwhm_h=FWHM(l_high, diam)
+	fwhm_l=FWHM(l_low, diam)
+	log.info("FWHM range is {0:.02f} deg - {1:.02f} deg".format(fwhm_l, fwhm_h))
+	fov_high=FoV(fwhm_h)
+	fov_low=FoV(fwhm_l)
+	log.info("FoV range is {0:.02f} deg^2 - {1:.02f} deg^2".format(fov_low, fov_high))
+	cell, wmax, N=params(l_low, l_high, diam, resbaseline, fov_low, fov_high)
+	cellround=round(cell / 5.)*5.
+	log.info("Cell Size: {0:.02f} arcsec, rounding to {1:.02f} arcsec".format(cell, cellround))
+	# print "wmax: {0:.02f}".format(cell)
+	N*=2
+	Nround=round(N / 100.) * 100.
+	log.info("N Pixels: {0:.02f} rounding to {1:.02f}".format(N, Nround))
+	#got what we need, now to write the parset
+	parsetname="parsets/aw_rough.parset"
+	f=open(parsetname, 'w')
+	f.write("weight=briggs\n\
+robust=0\n\
+npix={0}\n\
+cellsize={1}arcsec\n\
+data=CORRECTED_DATA\n\
+padding=1.5\n\
+stokes=I\n\
+niter=2500\n\
+operation=mfclark\n\
+oversample=5\n\
+wmax={2}\n\
+cyclefactor=1.5\n\
+gain=0.1\n\
+timewindow=300\n\
+ChanBlockSize=2\n\
+ApplyElement=0".format(int(Nround), int(cellround), int(wmax)))
+	f.close()
+	return parsetname, uv_max
 
 def getimgstd(infile):
 	fln=pyfits.open(infile)
@@ -612,11 +704,11 @@ def Median_clip(arr, sigma=3, max_iter=3, ftol=0.01, xtol=0.05, full_output=Fals
 def average_band_images(snap, beams):
 	for b in beams:
 		log.info("Averaging {0} SAP00{1}...".format(snap, b))
-		subprocess.call("{0} {1}/images/{1}_SAP00{2}_AVG {1}/images/{1}_SAP00{2}_BAND0?.MS.dppp.img.fits > {1}/logs/average_SAP00{2}_log.txt 2>&1".format(tools["average"], snap, b), shell=True)
+		subprocess.call("{0} {1}/images/{1}_SAP00{2}_AVG {1}/images/*SAP00{2}_BAND0?*MS.dppp.img.fits > {1}/logs/average_SAP00{2}_log.txt 2>&1".format(tools["average"], snap, b), shell=True)
 	
 def create_mosaic(snap, band_nums, chosen_environ, pad, avgpbr, ncp):
 	for b in band_nums:
-		tocorrect=sorted(glob.glob(os.path.join(snap, "images","L*_SAP00?_BAND0{0}.MS.dppp.img_mosaic0.avgpb".format(b))))
+		tocorrect=sorted(glob.glob(os.path.join(snap, "images","*SAP00?_BAND0{0}*.img_mosaic0.avgpb".format(b))))
 		for w in tocorrect:
 			wname=w.split("/")[-1]
 			if chosen_environ=='rsm-mainline' and pad > 1.0:
@@ -636,7 +728,7 @@ def create_mosaic(snap, band_nums, chosen_environ, pad, avgpbr, ncp):
 				avgpb.close()
 			log.info("Zeroing corners of avgpb {0}...".format(wname))
 			subprocess.call("{0} -r {1} {2} > {3}/logs/avgpbz_{4}_log.txt 2>&1".format(tools["mosaicavgpb"], avgpbr, w, snap, wname), shell=True)
-		tomosaic=sorted(glob.glob(os.path.join(snap, "{0}_SAP00?_BAND0{1}.MS.dppp".format(snap,b))))
+		tomosaic=sorted(glob.glob(os.path.join(snap, "*SAP00?_BAND0{0}*.MS.dppp".format(b))))
 		if not os.path.isdir(os.path.join(snap, "images", "mosaics")):
 			os.mkdir(os.path.join(snap, "images", "mosaics"))
 		log.info("Creating {0} BAND0{1} Mosaic...".format(snap, b))
@@ -751,20 +843,20 @@ def hba_calibrate_msss1(Calib, beams, diff, calparset, calmodel, correctparset, 
 		subprocess.call("calibrate-stand-alone --sourcedb sky.dummy --parmdb {0}.parmdb {1} {2} {3} > {4}/logs/calibrate_transfer_{5}.txt 2>&1".format(Calib, target, correctparset, dummy, curr_obs, target_name), shell=True)
 		shiftndppp(target, tar_obs, target_name)
 		
-def hba_final_concat(band, beam, target_obs, correct):
+def hba_final_concat(band, beam, target_obs):
 	"""
 	Simply uses concat.py to concat all the BANDX together into a final set.
 	"""
 	log.info("Concatenating BEAM {0} BAND{1:02d}".format(beam, band))
-	concat_commd="{0} SAP00{1}_BAND{2:02d}_FINAL.MS.dppp".format(tools["concat"],beam,band)
+	concat_commd="{0} final_datasets/SAP00{1}_BAND{2:02d}_FINAL.MS.dppp".format(tools["concat"],beam,band)
 	toconcat=sorted(glob.glob("L*/*SAP00{0}*BAND{1:02d}*.dppp".format(beam, band)))
 	for ms in toconcat:
-		temp=pt.table("{0}/SPECTRAL_WINDOW".format(ms), ack=False)
-		nchans=int(temp.col("NUM_CHAN")[0])
-		if nchans == correct:
-			concat_commd+=" {0}".format(ms)
-		else:
-			log.error("MS {0} has less than {1} channels - skipping in concat...".format(ms, correct))
+		# temp=pt.table("{0}/SPECTRAL_WINDOW".format(ms), ack=False)
+		# nchans=int(temp.col("NUM_CHAN")[0])
+		# if nchans == correct:
+		concat_commd+=" {0}".format(ms)
+		# else:
+			# log.error("MS {0} has less than {1} channels - skipping in concat...".format(ms, correct))
 	subprocess.call(concat_commd+" > logs/concat_SAP00{0}_BAND{1:02d}.log 2>&1".format(beam, band), shell=True)
 	
 #----------------------------------------------------------------------------------------------------------------------------------------------
