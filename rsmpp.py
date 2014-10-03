@@ -536,10 +536,6 @@ else:
 		subprocess.call(["cp","-r","../to_process.py", "."])
 	if not os.path.isdir('logs'):
 		os.mkdir('logs')
-	if mastermode=="INT":
-		if not os.path.isdir('final_datasets'):
-			os.mkdir('final_datasets')
-			os.mkdir('final_datasets/logs')
 	#copy over parset file used
 	subprocess.call(["cp",os.path.join("..", config_file), config_file+"_used"])
 	if lta:
@@ -554,6 +550,10 @@ else:
 	else:
 		target_obs=to_process
 	minimum_obstorun={"INT":2, "SIM":1}
+	if len(target_obs)>1:
+		if not os.path.isdir('final_datasets'):
+			os.mkdir('final_datasets')
+			os.mkdir('final_datasets/logs')
 	
 	#----------------------------------------------------------------------------------------------------------------------------------------------
 	#																			LTA Fetch
@@ -925,9 +925,11 @@ Pipeline now stopping...".format(i, data_dir))
 		elif multisky:
 			log.info("Copying skymodels for each beam...")
 			for b in sorted(multiskymodels.keys()):
-				subprocess.call(["cp", os.path.join("..",multiskymodels[b]), b])
+				thismodel=multiskymodels[b]
+				subprocess.call(["cp", os.path.join("..",thismodel), b])
+				beamc=b.split("/")[-1].split(".")[0]
 				if imaging_set:
-					subprocess.call("makesourcedb in={0} out={1} format=\'<\' > logs/skysourcedb_{2}.log 2>&1".format(skymodel, skymodel.replace(".skymodel", ".sky"), beamc), shell=True)
+					subprocess.call("makesourcedb in={0} out={1} format=\'<\' > logs/skysourcedb_{2}.log 2>&1".format(b, b.replace(".skymodel", ".sky"), beamc), shell=True)
 			create_sky=True
 			
 
@@ -1199,7 +1201,8 @@ Pipeline now stopping...".format(i, data_dir))
 				imagetargetobs=target_obs+["final_datasets"]
 			for i in imagetargetobs:
 				os.chdir(i)
-				os.mkdir("images")
+				if not os.path.isdir("images"):
+					os.mkdir("images")
 				subprocess.call("mv *.fits images/", shell=True)
 				subprocess.call("mv *.model *.residual *.psf *.restored *.avgpb *.img0.spheroid_cut* *.corr images/", shell=True)
 				os.chdir("..")

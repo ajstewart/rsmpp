@@ -469,11 +469,11 @@ def AW_Steps(g, aw_sets, maxb, aw_env, niter, imagingmode, bandsthreshs_dict, in
 	Performs imaging with AWimager using user supplied settings.
 	"""
 	c=299792458.
-	if g.find("/"):
+	if "/" in g:
 		logname=g.split("/")[-1]
 	else:
 		logname=g
-	if g.find("FINAL"):
+	if "FINAL" in g:
 		obsid="final_datasets"
 	else:
 		obsid=logname.split("_")[0]
