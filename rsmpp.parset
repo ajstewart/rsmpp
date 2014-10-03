@@ -2,7 +2,7 @@
 #Some [DATA] arguments are not valid for a particular mode but should still be set
 
 [GENERAL]
-mode=INT
+mode=INT ; 'INT' or 'SIM'
 nice=10
 loglevel=INFO
 lightweight=on
@@ -12,9 +12,9 @@ overwrite=on
 
 [LTA]
 LTAfetch=off
-method=html
+method=html ; 'html' or 'srm'
 htmlfile=html.txt
-n_simult_dwnlds=6
+n_simult_dwnlds=4
 missing_attempts=10
 delay=120
 savedir=/media/RAIDD/lofar_data/
@@ -36,15 +36,15 @@ remaindersubbands=4
 [PROCESSING]
 phase-cal-on=bands ; select to perform phase cal on 'bands' or 'subbands'.
 concat-bands=on ; if phase cal is only performed on sub bands - this option selects whether to concatenate the bands after or not.
-cobalt-flag=off
+cobalt-flag=off ; experimental
 rficonsole=on
-autoflag=on
-save-preflag=off
+autoflag=on ; auto bad station flagging
+save-preflag=off ; saves measurement sets prior to autoflag
 postcut=0
 PHASEONLY=off
 phaseonly_name=phase_only_run
 phaseonly_col=CORRECTED_DATA
-phaseonly_selection=L*BAND??*.dppp
+phaseonly_selection=L*BAND??*.dppp ; will find all datasets in directories that match glob entry
 
 [PARSETS]
 ndppp=parsets/ndppp.1.initial.parset
@@ -67,13 +67,13 @@ peelingshort=off
 
 [IMAGING]
 imaging=off
-imagingmode=auto
-toimage=obsbands
-rsminitialiter=500
-rsmbandrms=0.053,0.038,0.035,0.028
+imagingmode=parset ; 'parset' or 'auto'
+toimage=obsbands ; 'obsbands', 'finalbands' or 'both'
 maxbunit=UV
 maxbaseline=3.0
 mask=off
 mosaic=off
 avgpbrad=0.5
 ncpmode=off
+rsminitialiter=500 ; ignore
+rsmbandrms=0.053,0.038,0.035,0.028 ; ignore
