@@ -15,7 +15,7 @@ LTAfetch=off
 method=html ; 'html' or 'srm'
 htmlfile=html.txt
 n_simult_dwnlds=4
-missing_attempts=10
+missing_attempts=20
 delay=120
 savedir=/media/RAIDD/lofar_data/
 
