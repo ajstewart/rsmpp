@@ -745,7 +745,7 @@ Pipeline now stopping...".format(i, data_dir))
 				log.info(i)
 				if os.path.isdir(os.path.join(data_dir,i))==False:
 					log.critical("Calibrator Snapshot {0} cannot be located in data directory {1}, please check.\n\
-	Pipeline now stopping...".format(i, data_dir))
+Pipeline now stopping...".format(i, data_dir))
 					sys.exit()
 				if not os.path.isdir(i):
 					subprocess.call("mkdir -p {0}/plots {0}/logs {0}/flagging".format(i), shell=True)
