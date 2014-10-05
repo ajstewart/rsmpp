@@ -7,19 +7,21 @@
 #A full user guide can be found on google docs here:
 # https://docs.google.com/document/d/1aqUxesq4I02i1mKJw_XHjLy0smCbL37uhtBpNf9rs9w
 
-#Written by Adam Stewart, Last Update September 2014
+#Written by Adam Stewart, Last Update October 2014
 
-#---Version 2.2.0---
+#---Version 2.4.0---
 
-import subprocess, multiprocessing, os, glob, optparse, sys, datetime, string, getpass, time, logging, ConfigParser, base64
+import subprocess, multiprocessing, os, glob, optparse, sys, string, getpass, time, logging, ConfigParser, base64
 from functools import partial
 from multiprocessing import Pool
 import pyrap.tables as pt
+from pyrap.quanta import quantity
+from datetime import datetime
 from itertools import izip
 import numpy as np
 #import stuff for email
 import emailslofar as em
-vers="2.2.0"	#Current version number
+vers="2.4.0"	#Current version number
 
 import rsmppfuncs as rsmshared
 
@@ -67,7 +69,7 @@ config.read(config_file)
 
 #Few date things for naming and user
 user=getpass.getuser()
-now=datetime.datetime.utcnow()
+now=datetime.utcnow()
 
 date_time_start=now.strftime("%d-%b-%Y %H:%M:%S")
 newdirname="rsmpp_{0}".format(now.strftime("%H:%M:%S_%d-%b-%Y"))
@@ -115,13 +117,17 @@ group.add_option("-E", "--remaindersubbands", action="store", type=int, dest="re
 scheme chosen - they will be added to the last band [default: %default]")
 parser.add_option_group(group)
 group = optparse.OptionGroup(parser, "Processing Options")
+group.add_option("--phase-cal-on", action="store", type="choice", dest="phaseon", choices=["bands", "subbands"], default=config.get("PROCESSING", "phase-cal-on"),help="Select whether to perform phase calibration on the sub bands or concatenated bands. [default: %default]")
+group.add_option("--concat-bands", action="store_true", dest="concatbands", default=config.getboolean("PROCESSING", "concat-bands"),help="Only valid if phase-cal is performed only on sub bands - this defines whether to concatenate the bands after sub band calibration. [default: %default]")
+group.add_option("--cobalt-flag", action="store_true", dest="cobalt", default=config.getboolean("PROCESSING", "cobalt-flag"),help="Flag pre-processed data for underperforming Cobalt stations [default: %default]")
 group.add_option("--rficonsole", action="store_true", dest="rfi", default=config.getboolean("PROCESSING", "rficonsole"),help="Use this option to run rficonsole before phase-only calibration [default: %default]")
 group.add_option("-f", "--flag", action="store_true", dest="autoflag", default=config.getboolean("PROCESSING", "autoflag"),help="Use this option to use autoflagging in processing [default: %default]")
+group.add_option("--save-preflag", action="store_true", dest="saveflag", default=config.getboolean("PROCESSING", "save-preflag"),help="Use this option to save the measurement set before the auto station flagging [default: %default]")
 group.add_option("-t", "--postcut", action="store", type="int", dest="postcut", default=config.getint("PROCESSING", "postcut"),help="Use this option to enable post-bbs flagging, specifying the cut level [default: %default]")
 group.add_option("-P", "--PHASEONLY", action="store_true", dest="PHASEONLY", default=config.getboolean("PROCESSING", "PHASEONLY"),help="Choose just to perform only a phase only calibration on an already EXISTING rsmpp output [default: %default]")
 group.add_option("--phaseonly_name", action="store", type="string", dest="phase_name", default=config.get("PROCESSING", "phaseonly_name"),help="Specifcy the name of the output directory of the phase only mode [default: %default]")
 group.add_option("--phaseonly_col", action="store", type="choice", dest="phase_col", choices=['DATA', 'CORRECTED_DATA',], default=config.get("PROCESSING", "phaseonly_col"),help="Choose which column to pull the data from ('DATA' or 'CORRECTED_DATA') [default: %default]")
-group.add_option("--phaseonly_bands", action="store", type="string", dest="phase_pattern", default=config.get("PROCESSING", "phaseonly_bands"),help="Specifcy the glob pattern to select the bands to perform the phase-cal on (eg. '??' selects L*/L*BAND??_*.dppp) [default: %default]")
+group.add_option("--phaseonly_selection", action="store", type="string", dest="phase_pattern", default=config.get("PROCESSING", "phaseonly_selection"),help="Specifcy the glob pattern to select the measurement sets to perform the phase-cal on (eg. '??' selects L*/L*BAND??_*.dppp) [default: %default]")
 parser.add_option_group(group)
 group = optparse.OptionGroup(parser, "Parset Options:")
 group.add_option("-k", "--ndppp", action="store", type="string", dest="ndppp", default=config.get("PARSETS", "ndppp"),help="Specify the template initial NDPPP file to use [default: %default]")
@@ -147,15 +153,17 @@ group.add_option("-c", "--peelsources", action="store", type="string", dest="pee
 parser.add_option_group(group)
 group = optparse.OptionGroup(parser, "Imaging Options:")
 group.add_option("-i", "--imaging", action="store_true", dest="imaging", default=config.getboolean("IMAGING", "imaging"),help="Set whether you wish the data to be imaged. [default: %default]")
-group.add_option("-A", "--automaticthresh", action="store_true", dest="automaticthresh", default=config.getboolean("IMAGING", "automaticthresh"),help="Switch on automatic threshold method of cleaning [default: %default]")
-group.add_option("-I", "--initialiter", action="store", type="int", dest="initialiter", default=config.getint("IMAGING", "initialiter"),help="Define how many cleaning iterations should be performed in order to estimate the threshold [default: %default]")
-group.add_option("-R", "--bandrms", action="store", type="string", dest="bandrms", default=config.get("IMAGING", "bandrms"),help="Define the prior level of expected band RMS for use in automatic cleaning, enter as '0.34,0.23,..' no spaces, in units of Jy [default: %default]")
+group.add_option("--imagingmode", action="store", type="choice", choices=['parset', 'auto', 'rsm'], dest="imagingmode", default=config.get("IMAGING", "imagingmode"),help="Choose which imaging mode to use: 'parset', 'auto' or 'rsm'. [default: %default]")
+group.add_option("--toimage", action="store", type="choice", choices=['obsbands', 'finalbands', 'both'], dest="toimage", default=config.get("IMAGING", "toimage"),help="Choose which datasets to image: 'obsbands', 'finalbands' or 'both'. [default: %default]")
+# group.add_option("-A", "--automaticthresh", action="store_true", dest="automaticthresh", default=config.getboolean("IMAGING", "automaticthresh"),help="Switch on automatic threshold method of cleaning [default: %default]")
+group.add_option("-I", "--rsminitialiter", action="store", type="int", dest="initialiter", default=config.getint("IMAGING", "rsminitialiter"),help="Define how many cleaning iterations should be performed in order to estimate the threshold [default: %default]")
+group.add_option("-R", "--rsmbandrms", action="store", type="string", dest="bandrms", default=config.get("IMAGING", "rsmbandrms"),help="Define the prior level of expected band RMS for use in automatic cleaning, enter as '0.34,0.23,..' no spaces, in units of Jy [default: %default]")
 group.add_option("-U", "--maxbunit", action="store", type="choice", dest="maxbunit", choices=['UV', 'm',], default=config.get("IMAGING", "maxbunit"),help="Choose which method to limit the baselines, enter 'UV' for UVmax (in klambda) or 'm' for physical length (in metres) [default: %default]")
 group.add_option("-L", "--maxbaseline", action="store", type="int", dest="maxbaseline", default=config.getfloat("IMAGING", "maxbaseline"),help="Enter the maximum baseline to image out to, making sure it corresponds to the unit options [default: %default]")
 group.add_option("-m", "--mask", action="store_true", dest="mask", default=config.getboolean("IMAGING", "mask"), help="Use option to use a mask when cleaning [default: %default]")
 group.add_option("-M", "--mosaic", action="store_true", dest="mosaic", default=config.getboolean("IMAGING", "mosaic"),help="Use option to produce snapshot, band, mosaics after imaging [default: %default]")
 group.add_option("--avgpbradius", action="store", type="float", dest="avgpbrad", default=config.get("IMAGING", "avgpbrad"),help="Choose radius for which avgpbz.py trims the primary beam when mosaicing [default: %default]")
-group.add_option("--ncpmode", action="store_true", dest="ncp", default=config.get("IMAGING", "ncpmode"),help="Turn this option on when mosaicing the North Celestial Pole [default: %default]")
+group.add_option("--ncpmode", action="store_true", dest="ncp", default=config.getboolean("IMAGING", "ncpmode"),help="Turn this option on when mosaicing the North Celestial Pole [default: %default]")
 parser.add_option_group(group)
 (options, args) = parser.parse_args()
 
@@ -221,7 +229,11 @@ log.info("Run started at {0} UTC".format(date_time_start))
 log.info("rsmpp.py Version {0}".format(vers))
 log.info("Running on {0} lofar software".format(chosen_environ))
 log.info("Running in {0} mode".format(mode_choices[mastermode]))
-log.info("User: {0} - email set to {1}".format(user, mail))
+log.info("User: {0}".format(user))
+if mail:
+	log.info("Email alerts will be sent")
+else:
+	log.warning("No email alerts will be sent")
 
 #----------------------------------------------------------------------------------------------------------------------------------------------
 #																Options Assignment to variables
@@ -229,10 +241,13 @@ log.info("User: {0} - email set to {1}".format(user, mail))
 
 #Set options to variables just to make life a bit easier
 precal=options.precalib	#precalibrated mode
+cobalt=options.cobalt	#perform station flagging on pre-processed cobalt data
 precalloc=options.precalibloc	#precalibrated data location
 autoflag=options.autoflag	#autoflagging on or off
+saveflag=options.saveflag	#save the output prior to autoflag
 imaging_set=options.imaging	#if imaging is to be performed
-automaticthresh=options.automaticthresh	#if the automated imaging threshold strategy should be used
+imagingmode=options.imagingmode	#which imaging mode to be used
+# automaticthresh=options.automaticthresh	#if the automated imaging threshold strategy should be used
 initialiters=options.initialiter #Initial imaging iterations
 bandthreshs=options.bandrms	#the band thresholds
 maxbunit=options.maxbunit.upper()	#unit of maximum baseline lenght (UV or M)
@@ -250,7 +265,6 @@ shortpeel=options.peelingshort	#do not add the sources back in on off
 peelsources_todo=options.peelsources	#specify individual sources to peel
 postcut=options.postcut	#level of post bbs NDPPP to flag down to
 overwrite=options.overwrite	#to overwrite output directory if already exists
-toflag=""	#baselines to flag variable, starts off blank
 calparset=options.calparset	#calibrator bbs parset
 data_dir=options.datadir	#directory where data to process is located
 calmodel=options.calmodel	#calibrator model
@@ -265,6 +279,8 @@ bandsno=options.bandsno	#number of bands there should be
 subsinbands=options.subsinbands	#number of sub bands to combine to make a band
 calibbeam=options.calibratorbeam	#calibrator beam in sim mode
 remaindersbs=options.remaindersbs	#remainder sub bands - only in sim mode
+phaseon=options.phaseon	#phase calibrate bands or sub bands
+concatbands=options.concatbands #continue to concat bands after sub band phase cal
 toprocess=options.obsids	#toprocess variable - what ID's to run
 lta=options.lta	#fetch data from lta on or off
 html=options.htmlfile	#lta html file
@@ -275,6 +291,7 @@ ltacores=options.ltacores #number of downloads
 ltameth=options.ltameth #htmlorsrc
 rfi=options.rfi
 ncp=options.ncp
+setstoimage=options.toimage
 mode="UNKNOWN"
 
 #Now gather the ids that will be run, either from a file or if not a text input.
@@ -310,12 +327,6 @@ if 0 > n or n > multiprocessing.cpu_count():
 Pipeline now stopping...".format(multiprocessing.cpu_count()))
 	sys.exit()
 
-#Whether flagging is to be used
-if toflag !="" or autoflag ==True:	#If user selects stations to flag then flag also needs to be set to true.
-	flag=True
-else:
-	flag=False
-
 #Imaging Check inc parsets are present
 if imaging_set:
 	bandsthreshs_dict={}
@@ -324,7 +335,7 @@ if imaging_set:
 Pipeline now stopping...")
 		sys.exit()
 	#if automatic method we then need to check we have the correct number of band thresholds
-	if automaticthresh:
+	if imagingmode=='rsm':
 		tempbandsthresh=bandthreshs.split(",")
 		if len(tempbandsthresh) < bandsno:
 			log.critical("Number of thresholds given is less than the number of bands")
@@ -345,11 +356,29 @@ if toprocess=="to_process.py":
 		log.critical("Cannot locate 'to_process.py', please check file is present\nPipeline now stopping...")
 		sys.exit()
 
-#Check skymodel creation choice or file
+#Check skymodel creation choice or file or multi sky models for beams
+multisky=False
 if skymodel=="AUTO":
 	create_sky=True
 else:
-	if not os.path.isfile(skymodel):
+	if "," in skymodel:
+		log.info("Multiple sky models detected as input.")
+		multisky=True
+		multiskytmp=skymodel.replace(" ", "").split(",")
+		if len(multiskytmp)!=len(beams):
+			log.critical("Number of sky models does not match number of target beams - please confirm settings.")
+			sys.exit()
+		else:
+			#check they are actually there
+			for model in multiskytmp:
+				if not os.path.isfile(model):
+					log.info("Cannot find sky model {0} - please check file and try again.".format(model))
+					sys.exit()
+			multiskymodels={}
+			for model in xrange(len(beams)):
+				multiskymodels["parsets/SAP{0:03d}.skymodel".format(beams[model])]=multiskytmp[model]
+			create_sky=False
+	elif not os.path.isfile(skymodel):
 		log.error("Cannot locate {0}, please check your skymodel file is present\n\
 If you would like to automatically generate a skymodel file do not use the -s option.\nPipeline now stopping...".format(skymodel))
 		sys.exit()
@@ -427,20 +456,24 @@ if phaseO:
 			os.chdir(newdirname)
 			working_dir=os.getcwd()
 			#Get new parset and skymodel if not present
-			if not os.path.isfile(phaseparset):
-				checkforphase=os.path.join("..",phaseparset)
-				if os.path.isfile(checkforphase):
-					subprocess.call("cp {0} parsets/".format(checkforphase), shell=True)
-				else:
-					log.critical("Cannot find phase parset in results or main parsets directory!")
-					sys.exit()
+			checkforphase=os.path.join("..",phaseparset)
+			if os.path.isfile(checkforphase):
+				subprocess.call("cp {0} parsets/".format(checkforphase), shell=True)
+			else:
+				log.critical("Cannot find phase parset in results or main parsets directory!")
+				sys.exit()
 			if not create_sky:
-				if not os.path.isfile(skymodel):
+				if multisky:
+					log.info("Copying skymodels for each beam...")
+					for b in sorted(multiskymodels.keys()):
+						subprocess.call(["cp", os.path.join("..",multiskymodels[b]), b])
+						create_sky=True
+				else:
 					checkformodel=os.path.join("..",skymodel)
 					if os.path.isfile(checkformodel):
 						subprocess.call("cp {0} parsets/".format(checkformodel), shell=True)
 					else:
-						log.critical("Cannot find sky model in results or main  parsets directory!")
+						log.critical("Cannot find sky model in main  parsets directory!")
 						sys.exit()
 			ids_present=sorted(glob.glob("L?????*"))
 			for id in ids_present:
@@ -453,12 +486,14 @@ if phaseO:
 						log.critical("{0} already exists! Use overwrite option or change output name.".format(newoutput))
 						sys.exit()
 				os.mkdir(newoutput)
-		tophase=sorted(glob.glob("L*/L*BAND{0}*.dppp".format(phase_pattern)))
+				os.mkdir(os.path.join(newoutput, "preflagged"))
+		tophase=sorted(glob.glob("L*/{0}".format(phase_pattern)))
 		workers=Pool(processes=n)
-		standalone_phase_multi=partial(rsmshared.standalone_phase, phaseparset=phaseparset, flag=flag, toflag=toflag, autoflag=autoflag, create_sky=create_sky, skymodel=skymodel, phaseoutput=phase_name, phasecolumn=phase_col)
+		standalone_phase_multi=partial(rsmshared.standalone_phase, phaseparset=phaseparset, autoflag=autoflag, saveflag=saveflag, create_sky=create_sky, skymodel=skymodel, phaseoutput=phase_name, phasecolumn=phase_col)
 		workers.map(standalone_phase_multi, tophase)
 		log.info("All finished successfully")
-		end=datetime.datetime.utcnow()
+		workers.close()
+		end=datetime.utcnow()
 		date_time_end=end.strftime("%d-%b-%Y %H:%M:%S")
 		tdelta=end-now
 		if mail==True:
@@ -515,6 +550,10 @@ else:
 	else:
 		target_obs=to_process
 	minimum_obstorun={"INT":2, "SIM":1}
+	if len(target_obs)>1:
+		if not os.path.isdir('final_datasets'):
+			os.mkdir('final_datasets')
+			os.mkdir('final_datasets/logs')
 	
 	#----------------------------------------------------------------------------------------------------------------------------------------------
 	#																			LTA Fetch
@@ -528,6 +567,8 @@ else:
 		#Switch to data_dir, read in html file and start downloading
 		os.chdir(data_dir)
 		lta_workers=Pool(processes=ltacores)
+		#Time range of data which needs the antenna table corrected
+		antenna_range=[4867430400.0, 4898793599.0]
 		html_temp=open(html, 'r')
 		initfetch=[htmlline.rstrip('\n') for htmlline in html_temp]
 		html_temp.close()
@@ -539,7 +580,7 @@ else:
 		log.info("Initial fetch complete!")
 		#Start the checking for missing files
 		log.info("Checking for missing files...")
-		for attempt in range(missattempts):
+		for attempt in xrange(missattempts):
 			# log.info("----------------------------------------------------------------------------------------")
 			log.info("Running Missing File Check {0} of {1}".format(attempt+1, missattempts))
 			#Files downloaded should match those in the html file with a few changes
@@ -566,6 +607,7 @@ else:
 					lta_workers.map(rsmshared.fetchgrid, tofetch)
 				
 		log.info("LTA fetch complete!")
+		lta_workers.close()
 		#Need to prepare data for pipeline: untar -> rename -> organise into dirs
 		log.info("Preparing data for pipeline use...")
 		ltaoutput=sorted(glob.glob("*.tar"))
@@ -587,6 +629,7 @@ else:
 			#Obtain a list of unique IDs
 			ltaobsids=[ltams.split("_")[0] for ltams in ltaoutput3]
 			uniq_ltaobsids=sorted(list(set(ltaobsids)))
+			antenna_corrections=[]
 			for lta_id in uniq_ltaobsids:
 				#Check if directory already exists
 				if os.path.isdir(lta_id):
@@ -596,7 +639,34 @@ else:
 					sys.exit()
 				else:	
 					os.mkdir(lta_id)
+					ms_example=sorted(glob.glob("{0}*.dppp".format(lta_id)))[0]
+					temp=pt.table(ms_example+'/OBSERVATION', ack=False)
+					tempst=float(temp.getcell("LOFAR_OBSERVATION_START", 0))
+					temp.close()
+					if tempst >= antenna_range[0] and tempst <= antenna_range[1]:
+						antenna_corrections.append(lta_id)
+						log.warning("{0}\t{1}\tAntenna Tables Correction Required".format(ms_example, datetime.utcfromtimestamp(quantity('{0}s'.format(tempst)).to_unix_time())))
+					else:
+						log.info("{0}\t{1}\tAntenna Tables Correction Not Required".format(ms_example, datetime.utcfromtimestamp(quantity('{0}s'.format(tempst)).to_unix_time())))
 			lta_workers.map(rsmshared.organise, ltaoutput3)
+			if len(antenna_corrections) > 0:
+				log.info("Performing Antenna Corrections")
+				gotfixinfo=rsmshared.fetchantenna()
+				if gotfixinfo:
+					os.chdir("fixinfo")
+					antenna_workers=Pool(processes=n)
+					for a in antenna_corrections:
+						tocorrect=sorted(glob.glob(os.path.join("..",a,"*.dppp")))
+						antenna_workers.map(rsmshared.correctantenna, tocorrect)
+					log.info("Complete!")
+					antenna_workers.close()
+					os.chdir("..")
+					open('ANTENNA_CORRECTIONS_PERFORMED','a').close()
+					subprocess.call("rm -rf fixinfo*", shell=True)
+				else:
+					log.warning("Unable to obtain the fixinfo script - antenna corrections will be skipped!")
+			else:
+				log.info("No Antenna Corrections Required")
 			#The IDs should match those defined in to_process
 			obsids_toremove=[]
 			for obsid in to_process:
@@ -618,6 +688,7 @@ else:
 			lta_workers.map(rsmshared.deletefile, ltaoutput)
 			log.info("Done!")
 			log.info("All LTA steps completed.")
+			lta_workers.close()
 		
 		#Change back to output directory
 		os.chdir(working_dir)
@@ -665,9 +736,9 @@ Pipeline now stopping...".format(i, data_dir))
 				sys.exit()
 			if not os.path.isdir(i):
 				if mastermode=="INT":
-					subprocess.call("mkdir -p {0}/logs {0}/flagging {0}/datasets".format(i), shell=True)
+					subprocess.call("mkdir -p {0}/logs {0}/flagging {0}/preflagged {0}/datasets".format(i), shell=True)
 				else:
-					subprocess.call("mkdir -p {0}/logs {0}/flagging {0}/datasets {0}/calibrators".format(i), shell=True)
+					subprocess.call("mkdir -p {0}/logs {0}/flagging {0}/preflagged {0}/datasets {0}/calibrators".format(i), shell=True)
 		if mastermode=="INT":
 			log.info("Calibrators to be processed:")
 			for i in calib_obs:
@@ -677,7 +748,7 @@ Pipeline now stopping...".format(i, data_dir))
 	Pipeline now stopping...".format(i, data_dir))
 					sys.exit()
 				if not os.path.isdir(i):
-					subprocess.call("mkdir -p {0}/plots {0}/logs".format(i), shell=True)
+					subprocess.call("mkdir -p {0}/plots {0}/logs {0}/flagging".format(i), shell=True)
 
 
 		#----------------------------------------------------------------------------------------------------------------------------------------------
@@ -697,6 +768,7 @@ Pipeline now stopping...".format(i, data_dir))
 		missing_calib_count=0
 		rsm_bands={}	#Store the measurement sets in terms of bands
 		rsm_bands_lens={}	#Store the length of each band (needed as some might be missing)
+		ideal_bands={}
 		diff=(bandsno*subsinbands)
 		if mastermode=="SIM":
 			diff+=remaindersbs
@@ -742,7 +814,7 @@ Pipeline now stopping...".format(i, data_dir))
 						missing_count+=1
 				for b in beams:
 					#This now uses a function to check all the targets, now missing what calibs are missing - which without nothing can be done
-					localmiss=rsmshared.hba_check_targets(i, b, targets, targets_corrupt, rsm_bands, rsm_band_numbers, rsm_bands_lens, missing_calibrators, data_dir, diff, g, subsinbands)
+					localmiss=rsmshared.hba_check_targets(i, b, targets, targets_corrupt, rsm_bands, rsm_band_numbers, rsm_bands_lens, missing_calibrators, data_dir, diff, g, subsinbands, ideal_bands)
 					missing_count+=localmiss
 					#covers run if user accidentally adds a beam which is missing or doesn't exist.
 				log.info("{0} and {1} checks done!".format(i,j))
@@ -782,7 +854,7 @@ Pipeline now stopping...".format(i, data_dir))
 						missing_count+=1	
 				for b in beams:
 					#This now uses a function to check all the targets, now knowing what calibs are missing - which without nothing can be done
-					localmiss=rsmshared.lba_check_targets(i, b, targets, targets_corrupt, rsm_bands, rsm_band_numbers, rsm_bands_lens, missing_calibrators, data_dir, diff, g, subsinbands, calibbeam)
+					localmiss=rsmshared.lba_check_targets(i, b, targets, targets_corrupt, rsm_bands, rsm_band_numbers, rsm_bands_lens, missing_calibrators, data_dir, diff, g, subsinbands, calibbeam, ideal_bands)
 					missing_count+=localmiss
 				log.info("{0} check done!".format(i))
 
@@ -850,6 +922,16 @@ Pipeline now stopping...".format(i, data_dir))
 					raise Exception("Skymodel {0} failed to be created".format(skymodel))
 				if imaging_set:
 					subprocess.call("makesourcedb in={0} out={1} format=\'<\' > logs/skysourcedb_{2}.log 2>&1".format(skymodel, skymodel.replace(".skymodel", ".sky"), beamc), shell=True)
+		elif multisky:
+			log.info("Copying skymodels for each beam...")
+			for b in sorted(multiskymodels.keys()):
+				thismodel=multiskymodels[b]
+				subprocess.call(["cp", os.path.join("..",thismodel), b])
+				beamc=b.split("/")[-1].split(".")[0]
+				if imaging_set:
+					subprocess.call("makesourcedb in={0} out={1} format=\'<\' > logs/skysourcedb_{2}.log 2>&1".format(b, b.replace(".skymodel", ".sky"), beamc), shell=True)
+			create_sky=True
+			
 
 		#Now working through the steps starting with NDPPP (see rsmppfuncs.py for functions)
 		postcorrupt=0
@@ -895,6 +977,11 @@ Pipeline now stopping...".format(i, data_dir))
 										rsm_bands_lens[k]=len(rsm_bands[k])
 					corrupt_report.close()
 					log.debug("{0} Calibrators after NDPPP = {1}".format(j, calibs[j]))
+					if cobalt:
+						log.info("Performing Cobalt Flagging...")
+						worker_pool.map(rsmshared.cobalt_flag, calibs[j])
+						subprocess.call("mv {0}/*.stats {0}/*.tab {0}/*.pdf {0}/flagging/".format(j), shell=True)
+						subprocess.call("rm -rf {0}/GLOBAL_STATS".format(j), shell=True)
 				
 			for b in beams:
 				beam=b
@@ -937,10 +1024,11 @@ Pipeline now stopping...".format(i, data_dir))
 								rsm_bands_lens[q]=len(rsm_bands[q])
 				corrupt_report.close()
 				log.debug("{0} Beam {1} Targets after NDPPP = {2}".format(i, beamc, targets[i][beamc]))
-		
-			for q in sorted(rsm_bands):
-				bandtemp=q.split("_")[-1]
-				log.debug("{0} BAND {1} sets: {2}".format(i, bandtemp, rsm_bands[q]))
+				if cobalt and not precal:
+					log.info("Performing Cobalt Flagging...")
+					worker_pool.map(rsmshared.cobalt_flag, targets[i][beamc])
+					subprocess.call("mv {0}/*.stats {0}/*.tab {0}/*.pdf {0}/flagging/".format(i), shell=True)
+					subprocess.call("rm -rf {0}/GLOBAL_STATS".format(i), shell=True)
 			
 			log.info("Done!")
 			# calibrate step 1 process
@@ -960,28 +1048,47 @@ Pipeline now stopping...".format(i, data_dir))
 			else:
 				log.info("Data is precalibrated - calibrator calibration has been skipped")
 		
+		for q in sorted(rsm_bands):
+			bandtempsplit=q.split("_")
+			bandtemp=bandtempsplit[-1]
+			thisobs=bandtempsplit[0]
+			log.debug("{0} BAND {1} sets: {2}".format(thisobs, bandtemp, rsm_bands[q]))
+		
 		log.info("Done!")
-		#Combine the bands
-		log.info("Creating Bands for all sets...")
-		rsm_bandsndppp_multi=partial(rsmshared.rsm_bandsndppp, rsm_bands=rsm_bands)
-		if __name__ == '__main__':
-			worker_pool.map(rsm_bandsndppp_multi, sorted(rsm_bands.keys()))
-		log.info("Done!")
+		
+		if phaseon=="bands":
+			log.info("Phase calibration on {0} selected".format(phaseon))
+			#Combine the bands
+			log.info("Creating Bands for all sets...")
+			rsm_bandsndppp_multi=partial(rsmshared.rsm_bandsndppp, rsm_bands=ideal_bands, phaseon=phaseon)
+			if __name__ == '__main__':
+				worker_pool.map(rsm_bandsndppp_multi, sorted(rsm_bands.keys()))
+			log.info("Done!")		
+			tocalibrate=sorted(glob.glob("L*/L*_SAP00?_BAND*.MS.dppp.tmp"))
+		else:
+			log.info("Phase calibration on {0} selected".format(phaseon))
+			for sb in sorted(glob.glob("L*/L*.dppp")):
+				#bit dangerous but a quick fix
+				subprocess.call("mv {0} {0}.phasecaltmp".format(sb), shell=True)
+			tocalibrate=sorted(glob.glob("L*/L*_SAP00?_*.MS.dppp.phasecaltmp"))
+		
+		if rfi:
+			log.info("Starting flagging processes with rficonsole...")
+			# torfi=sorted(glob.glob(os.path.join(i,"*.MS.dppp")))
+			rficonsole_multi=partial(rsmshared.rficonsole, obsid=i)
+			worker_pool.map(rficonsole_multi, tocalibrate)
 		
 		log.info("Performing phaseonly calibration (and flagging if selected) on all sets...")
 		# calibrate step 2 process
 		tocalibrate=sorted(glob.glob("L*/L*_SAP00?_BAND*.MS.dppp.tmp"))
-		calibrate_msss2_multi=partial(rsmshared.calibrate_msss2, phaseparset=phaseparset, flag=flag, toflag=toflag, autoflag=autoflag, create_sky=create_sky, skymodel=skymodel)
+		calibrate_msss2_multi=partial(rsmshared.calibrate_msss2, phaseparset=phaseparset, autoflag=autoflag, saveflag=saveflag, create_sky=create_sky, skymodel=skymodel, phaseon=phaseon)
 		if __name__ == '__main__':
 			worker_pool.map(calibrate_msss2_multi, tocalibrate)
 		proc_target_obs=sorted(glob.glob("L*/L*_SAP00?_BAND*.MS.dppp"))
 		log.info("Done!")
-        
-		if rfi:
-			log.info("Starting flagging processes with rficonsole...")
-            # torfi=sorted(glob.glob(os.path.join(i,"*.MS.dppp")))
-			rficonsole_multi=partial(rsmshared.rficonsole, mode=mode, obsid=i)
-			worker_pool.map(rficonsole_multi, proc_target_obs)
+		
+		if autoflag:
+			subprocess.call("rm -rf L*/GLOBAL_STATS", shell=True)
 		
 		if peeling:
 			log.info("Peeling process started on all sets...")
@@ -1002,15 +1109,22 @@ Pipeline now stopping...".format(i, data_dir))
 				worker_pool.map(post_bbs_multi, proc_target_obs)
 			log.info("Done!")
 		
+		if phaseon=="subbands" and concatbands:
+			log.info("Creating Bands for all sets...")
+			rsm_bandsndppp_multi=partial(rsmshared.rsm_bandsndppp, rsm_bands=ideal_bands, phaseon=phaseon)
+			if __name__ == '__main__':
+				worker_pool.map(rsm_bandsndppp_multi, sorted(rsm_bands.keys()))
+			log.info("Done!")
+		
 		#----------------------------------------------------------------------------------------------------------------------------------------------
 		#																Final Concat Step for MSSS style
 		#----------------------------------------------------------------------------------------------------------------------------------------------
-		if mastermode=="INT":
-			correct=nchans*subsinbands
+		if len(target_obs)>1:
+			# correct=nchans*subsinbandss
 			log.info("Final concatenate process started...")
 			for be in beams:
 			# 	# snapshot_concat_multi=partial(rsmshared.snapshot_concat, beam=be)	#Currently cannot combine all bands in a snapshot (different number of subands)
-				final_concat_multi=partial(rsmshared.hba_final_concat, beam=be, target_obs=target_obs, correct=correct)
+				final_concat_multi=partial(rsmshared.hba_final_concat, beam=be, target_obs=target_obs)
 				if __name__ == '__main__':
 					worker_pool.map(final_concat_multi, rsm_band_numbers)
 
@@ -1026,12 +1140,23 @@ Pipeline now stopping...".format(i, data_dir))
 				# print awimager_environ
 			else:
 				awimager_environ=os.environ.copy()
-			
-			# globterms=["L*/L*BAND*.MS.dppp", "SAP00*BAND*_FINAL.MS"]		
-			toimage=sorted(glob.glob("L*/L*BAND*.MS.dppp"))
+			if setstoimage=="both":
+				toimage=sorted(glob.glob("*/*BAND*.MS.dppp"))
+			elif setstoimage=="obsbands":
+				toimage=sorted(glob.glob("L*/L*BAND*.MS.dppp"))
+			else:
+				toimage=sorted(glob.glob("final_datasets/*BAND*.MS.dppp"))
 			log.info("Starting imaging process with AWimager...")
+			log.info("Imaging mode: {0}".format(imagingmode))
+			log.info("Imaging: {0}".format(setstoimage))
+			if imagingmode=="auto":
+				imagingparset, maxb=rsmshared.awroughparset(toimage, bandsno, "vlss", mode)
+				maxbunit="UV"
+				initialiters=500
+			else:
+				imagingparset="parsets/aw.parset"
 			#Need to create sky model data
-			image_file=open("parsets/aw.parset", 'r')
+			image_file=open(imagingparset, 'r')
 			aw_sets=image_file.readlines()
 			image_file.close()
 			aw_sets=[setting.replace(" ", "") for setting in aw_sets]
@@ -1059,28 +1184,37 @@ Pipeline now stopping...".format(i, data_dir))
 				create_mask_multi=partial(rsmshared.create_mask, mask_size=mask_size, toimage=toimage)
 				if __name__ == '__main__':
 					worker_pool.map(create_mask_multi,beams)
-			AW_Steps_multi=partial(rsmshared.AW_Steps, aw_sets=aw_sets, maxb=maxb, aw_env=awimager_environ, niter=niters, automaticthresh=automaticthresh,
+			AW_Steps_multi=partial(rsmshared.AW_Steps, aw_sets=aw_sets, maxb=maxb, aw_env=awimager_environ, niter=niters, imagingmode=imagingmode,
 			bandsthreshs_dict=bandsthreshs_dict, initialiter=initialiters, uvORm=maxbunit, usemask=mask, userthresh=userthresh, mos=mosaic)
 			if __name__ == '__main__':
 				pool = Pool(processes=2)
 				pool.map(AW_Steps_multi,toimage)
+				pool.close()
 			log.info("Done!")
 
 			log.info("Tidying up imaging...")
-			for i in target_obs:
+			if setstoimage=="obsbands":
+				imagetargetobs=target_obs
+			elif setstoimage=="finalbands":
+				imagetargetobs=["final_datasets"]
+			else:
+				imagetargetobs=target_obs+["final_datasets"]
+			for i in imagetargetobs:
 				os.chdir(i)
-				os.mkdir("images")
-				subprocess.call("mv *.fits images", shell=True)
-				subprocess.call("mv *.model *.residual *.psf *.restored *.avgpb *.img0.spheroid_cut* *.corr images", shell=True)
+				if not os.path.isdir("images"):
+					os.mkdir("images")
+				subprocess.call("mv *.fits images/", shell=True)
+				subprocess.call("mv *.model *.residual *.psf *.restored *.avgpb *.img0.spheroid_cut* *.corr images/", shell=True)
 				os.chdir("..")
 			log.info("Creating averaged images...")
 			average_band_images_multi=partial(rsmshared.average_band_images, beams=beams)
 			if __name__=='__main__':
-				worker_pool.map(average_band_images_multi, target_obs)
+				worker_pool.map(average_band_images_multi, imagetargetobs)
 			if mosaic:
 				create_mosaic_multi=partial(rsmshared.create_mosaic, band_nums=rsm_band_numbers, chosen_environ=chosen_environ, pad=userpad, avgpbr=avpbrad, ncp=ncp)
 				pool=Pool(processes=len(rsm_band_numbers))
-				pool.map(create_mosaic_multi, target_obs)
+				pool.map(create_mosaic_multi, imagetargetobs)
+				pool.close()
 				for i in target_obs:
 					os.chdir(os.path.join(i, "images"))
 					subprocess.call("mv *_mosaic* mosaics/", shell=True)
@@ -1092,9 +1226,8 @@ Pipeline now stopping...".format(i, data_dir))
  
 		#Finishes up and moves the directory if chosen, performing checks
 		log.info("Tidying up...")
+		worker_pool.close()
 		if mastermode=="INT":
-			os.mkdir("final_datasets")
-			subprocess.call("mv SAP00*BAND*_FINAL.MS.dppp final_datasets > /dev/null 2>&1", shell=True)
 			if not precal:
 				for c in calib_obs:
 					subprocess.call("mkdir {0}/datasets {0}/parmdb_tables > /dev/null 2>&1".format(c), shell=True)
@@ -1129,7 +1262,7 @@ Pipeline now stopping...".format(i, data_dir))
 		log.info("All processed successfully!")
 		log.info("Results can be found in {0}".format(newdirname))
 	
-		end=datetime.datetime.utcnow()
+		end=datetime.utcnow()
 		date_time_end=end.strftime("%d-%b-%Y %H:%M:%S")
 		tdelta=end-now
 
@@ -1141,11 +1274,11 @@ Pipeline now stopping...".format(i, data_dir))
 		subprocess.call(["cp", "rsmpp.log", "{0}/rsmpp_{0}.log".format(newdirname)])
 	except Exception, e:
 		log.exception(e)
-		end=datetime.datetime.utcnow()
+		end=datetime.utcnow()
 		date_time_end=end.strftime("%d-%b-%Y %H:%M:%S")
 		tdelta=end-now
 		subprocess.call(["cp", os.path.join(root_dir, "rsmpp.log"), "rsmpp_CRASH.log".format(newdirname)])
 		if mail==True:
 			em.send_email(emacc,user_address,"rsmpp Job Error","{0},\n\nYour job {1} crashed with the following error:\n\n{2}\n\nTime of crash: {3}".format(user,newdirname,e, end))
 			em.send_email(emacc,"adam.stewart@astro.ox.ac.uk","rsmpp Job Error","{0}'s job '{1}' just crashed with the following error:\n\n{2}\n\nDirectory: {3}\n\nTime of crash: {4}".format(user,newdirname,e,root_dir,end))
-				
+			
