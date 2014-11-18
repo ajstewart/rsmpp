@@ -1,4 +1,4 @@
-#Version 2.4.0
+#Version 2.4.1
 
 import os, subprocess,time, multiprocessing, glob, datetime, pyfits, logging, sys
 import numpy as np
@@ -391,9 +391,9 @@ steps=[]".format(SB))
 		subprocess.call(['cp', "{0}".format(os.path.join(tools["peelingparsets"],'peeling_new_step2.parset')), peel2parset])
 	log.info("Determining sources to peel for {0}...".format(SB))
 	if peelsources=="0":
-		subprocess.call("{0} -i {1} -p {2} -m {3} -v -n {4} -l {5}".format(tools["peelingnew"], SB, peelparset, skymodel, peelnumsources, fluxlimit), shell=True)
+		subprocess.call("python {0} -i {1} -p {2} -m {3} -v -n {4} -l {5}".format(tools["peelingnew"], SB, peelparset, skymodel, peelnumsources, fluxlimit), shell=True)
 	else:
-		subprocess.call("{0} -i {1} -p {2} -m {3} -v -n {4} -s {5} -l {6}".format(tools["peelingnew"], SB, peelparset, skymodel, peelnumsources, peelsources, fluxlimit), shell=True)
+		subprocess.call("python {0} -i {1} -p {2} -m {3} -v -n {4} -s {5} -l {6}".format(tools["peelingnew"], SB, peelparset, skymodel, peelnumsources, peelsources, fluxlimit), shell=True)
 	newSB=SB+".peeltmp"
 	log.info("Peeling {0}...".format(SB))
 	subprocess.call("calibrate-stand-alone -f {0} {1} {2} > {4}/logs/{3}_peeling_calibrate.log 2>&1".format(newSB, peelparset, skymodel, logname, obsid), shell=True)
