@@ -1080,7 +1080,7 @@ Pipeline now stopping...".format(i, data_dir))
 		
 		log.info("Performing phaseonly calibration (and flagging if selected) on all sets...")
 		# calibrate step 2 process
-		tocalibrate=sorted(glob.glob("L*/L*_SAP00?_BAND*.MS.dppp.tmp"))
+		# tocalibrate=sorted(glob.glob("L*/L*_SAP00?_BAND*.MS.dppp.tmp"))
 		calibrate_msss2_multi=partial(rsmshared.calibrate_msss2, phaseparset=phaseparset, autoflag=autoflag, saveflag=saveflag, create_sky=create_sky, skymodel=skymodel, phaseon=phaseon)
 		if __name__ == '__main__':
 			worker_pool.map(calibrate_msss2_multi, tocalibrate)
