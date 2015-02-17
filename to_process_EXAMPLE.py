@@ -1,3 +1,5 @@
+#An example of the to_process file - to use this file rename it as simply to_process.py
+
 import glob
 
 #Example
