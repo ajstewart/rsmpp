@@ -9,7 +9,7 @@
 
 #Written by Adam Stewart, Last Update October 2014
 
-#---Version 2.4.1---
+#---Version 2.4.2---
 
 import subprocess, multiprocessing, os, glob, optparse, sys, string, getpass, time, logging, ConfigParser, base64
 from functools import partial
@@ -21,7 +21,7 @@ from itertools import izip
 import numpy as np
 #import stuff for email
 import emailslofar as em
-vers="2.4.1"	#Current version number
+vers="2.4.2"	#Current version number
 
 import rsmppfuncs as rsmshared
 
@@ -52,7 +52,7 @@ if len(sys.argv) > 1:
 		subprocess.call(["cp", os.path.join(mainrootpath, config_file), "."])
 		print "Copying parsets directory..."
 		subprocess.call(["cp", "-r", os.path.join(mainrootpath, "parsets"), "parsets"])
-		subprocess.call(["cp", os.path.join(mainrootpath, "to_process.py"), "."])
+		subprocess.call(["cp", os.path.join(mainrootpath, "to_process_EXAMPLE.py"), "."])
 		print "Now ready for pipeline run"
 		sys.exit()
 
@@ -544,6 +544,7 @@ else:
 	log.info("Collecting observations to process...")
 
 	if toprocess=="to_process.py":
+		sys.path.append(working_dir)
 		from to_process import to_process
 		target_obs=to_process
 		target_obs.sort()
