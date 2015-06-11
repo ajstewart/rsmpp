@@ -35,7 +35,7 @@ parser.add_option("-w", "--overwrite", action="store_true", dest="overwrite", de
 
 def convert_newawimager(environ):
 	"""
-	Returns an environment that utilises the new version of the AWimager.
+	Returns an environment that utilises the new version of the AWimager. Used for RSM environment.
 	"""
 	new_envrion=environ
 	environ['LOFARROOT']="/opt/share/lofar-archive/2013-02-11-16-46/LOFAR_r_b0fc3f4"
@@ -315,20 +315,19 @@ def splitdataset(dataset, interval, out):
 	starttime = t[0]['TIME']
 	endtime   = t[t.nrows()-1]['TIME']
 	numberofsplits=int((endtime-starttime)/interval)
-	first=True
 	for split in range(0, numberofsplits):
 		outputname=os.path.join(out, "splitMS", name+".{0}sec_{1:04d}.split".format(int(interval), split+1))
-		thisstart=starttime+(float(split)*interval)
-		thisend=starttime+((float(split)+1)*interval)
-		if first:
-			t1 = t.query('TIME > ' + str(thisstart-2.) + ' && \
-			TIME < ' + str(thisend), sortlist='TIME,ANTENNA1,ANTENNA2')
-			first=False
+		if split==0:
+			thisstart=starttime-2.
 		else:
-			t1 = t.query('TIME > ' + str(thisstart) + ' && \
-			TIME < ' + str(thisend), sortlist='TIME,ANTENNA1,ANTENNA2')
+			thisstart=starttime+(float(split)*interval)
+		thisend=starttime+((float(split)+1)*interval)
+		t1 = t.query('TIME > ' + str(thisstart) + ' && \
+		TIME < ' + str(thisend), sortlist='TIME,ANTENNA1,ANTENNA2')
 		t1.copy(outputname, True)
 		t1.close()
+		if split==0:
+			thisstart+=2.
 		t1=pt.table(outputname+"/OBSERVATION", ack=False, readonly=False)
 		thistimerange=np.array([thisstart, thisend])
 		t1.putcell('TIME_RANGE', 0, thistimerange)
@@ -372,12 +371,108 @@ def create_mosaics(tomos, out, time_mode, avgpbrad, usencp):
 		else:
 			subprocess.call("python /home/as24v07/scripts/mos.py -a avgpbz -o {0} -s {1} -a avgpbz {2}".format(mosname, sensname, images_cmd), shell=True)
 			
-def correctfits(fits_file, bw, endt):
+def open_subtables(table):
+	"""open all subtables defined in the LOFAR format
+	args:
+	table: a pyrap table handler to a LOFAR CASA table
+	returns:
+	a dict containing all LOFAR CASA subtables
+	"""
+	subtable_names = (
+	    'LOFAR_FIELD',
+	    'LOFAR_ANTENNA',
+	    'LOFAR_HISTORY',
+	    'LOFAR_ORIGIN',
+	    'LOFAR_QUALITY',
+	    'LOFAR_STATION',
+	    'LOFAR_POINTING',
+	    'LOFAR_OBSERVATION'
+	)
+	subtables = {}
+	for subtable in subtable_names:
+		subtable_location = table.getkeyword("ATTRGROUPS")[subtable]
+		subtables[subtable] = pt.table(subtable_location, ack=False)
+	return subtables
+	
+def close_subtables(subtables):
+	for subtable_name in subtables:
+		subtables[subtable_name].close()
+	return
+
+def unique_column_values(table, column_name):
+	"""
+	Find all the unique values in a particular column of a CASA table.
+	Arguments:
+	- table:       ``pyrap.tables.table``
+	- column_name: ``str``
+	Returns:
+	- ``numpy.ndarray`` containing unique values in column.
+	"""
+	return table.query(columns=column_name, sortlist="unique %s" % (column_name)).getcol(column_name)
+
+def parse_subbands(subtables):
+	origin_table = subtables['LOFAR_ORIGIN']
+	num_chans = unique_column_values(origin_table, "NUM_CHAN")
+	if len(num_chans) == 1:
+		return num_chans[0]
+	else:
+		raise Exception("Cannot handle varying numbers of channels in image")
+
+def parse_subbandwidth(subtables):
+	# subband
+	# see http://www.lofar.org/operations/doku.php?id=operator:background_to_observations&s[]=subband&s[]=width&s[]=clock&s[]=frequency
+	freq_units = {
+	'Hz': 1,
+	'kHz': 10 ** 3,
+	'MHz': 10 ** 6,
+	'GHz': 10 ** 9,
+	}
+	observation_table = subtables['LOFAR_OBSERVATION']
+	clockcol = observation_table.col('CLOCK_FREQUENCY')
+	clock_values = unique_column_values(observation_table, "CLOCK_FREQUENCY")
+	if len(clock_values) == 1:
+		clock = clock_values[0]
+		unit = clockcol.getkeyword('QuantumUnits')[0]
+		trueclock = freq_units[unit] * clock
+		subbandwidth = trueclock / 1024
+		return subbandwidth
+	else:
+		raise Exception("Cannot handle varying clocks in image")
+
+
+def parse_stations(subtables):
+	"""Extract number of specific LOFAR stations used
+	returns:
+	(number of core stations, remote stations, international stations)
+	"""
+	observation_table = subtables['LOFAR_OBSERVATION']
+	antenna_table = subtables['LOFAR_ANTENNA']
+	nvis_used = observation_table.getcol('NVIS_USED')
+	names = np.array(antenna_table.getcol('NAME'))
+	mask = np.sum(nvis_used, axis=2) > 0
+	used = names[mask[0]]
+	ncore = nremote = nintl = 0
+	for station in used:
+		if station.startswith('CS'):
+			ncore += 1
+		elif station.startswith('RS'):
+			nremote += 1
+		else:
+			nintl += 1
+	return ncore, nremote, nintl
+
+def correctfits(fits_file, bw, endt, ant, ncore, nremote, nintl, subbandwidth, subbands):
 	endtime=datetime.utcfromtimestamp(quantity(str(endt)+'s').to_unix_time())
 	fits=pyfits.open(fits_file, mode="update")
 	header=fits[0].header
 	header.update('RESTBW',bw)
 	header.update('END_UTC',endtime.strftime("%Y-%m-%dT%H:%M:%S.%f"))
+	header.update('ANTENNA',ant)
+	header.update('NCORE',ncore)
+	header.update('NREMOTE',nremote)
+	header.update('NINTL',nintl)
+	header.update('SUBBANDS',subbands)
+	header.update('SUBBANDW',subbandwidth)
 	fits.flush()
 	fits.close()
 	
@@ -453,40 +548,51 @@ UVmax={4}\n".format(g, imagename, finish_iters, thresh, UVmax, UVmin))
 	local_parset.close()
 	print "Cleaning {0} to threshold of {1}...".format(logname, thresh)
 	subprocess.call("awimager {0} > {1}/{2}/logs/awimager_{3}_standalone_final_log.txt 2>&1".format(aw_parset_name, out, obsid, logname), env=aw_env, shell=True)
-	if mosaic:
-		subprocess.call("cp -r {0}.restored.corr {0}_mosaic.restored.corr".format(imagename), shell=True)
-		subprocess.call("cp -r {0}0.avgpb {0}_mosaic0.avgpb".format(imagename), shell=True)
-		if env=="rsm-mainline":
-			if padding > 1.0:
-				#we need to correct the avgpb for mosaicing
-				print "Correcting {0} mosaic padding...".format(imagename)
-				avgpb=pt.table("{0}_mosaic0.avgpb".format(imagename), ack=False, readonly=False)
-				coordstable=avgpb.getkeyword('coords')
-				coordstablecopy=coordstable.copy()
-				value1=coordstablecopy['direction0']['crpix'][0]
-				value2=coordstablecopy['direction0']['crpix'][1]
-				value1*=padding
-				value2*=padding
-				newcrpix=np.array([value1, value2])
-				coordstablecopy['direction0']['crpix']=newcrpix
-				avgpb.putkeyword('coords', coordstablecopy)
-				avgpb.close()
-		subprocess.call("mv {0}*mosaic* {1}".format(imagename, os.path.join(out, obsid, "mosaics")), shell=True)
-	subprocess.call("addImagingInfo {0}.restored '' {6} {1} {2} > {3}/{4}/logs/addImagingInfo_standalone_{5}_log.txt 2>&1".format(imagename, localmaxb, g, out, obsid, logname, localminb), shell=True)
-	subprocess.call("addImagingInfo {0}.restored.corr '' {6} {1} {2} > {3}/{4}/logs/addImagingInfo_standalone_{5}_log.txt 2>&1".format(imagename, localmaxb, g, out, obsid, logname, localminb), shell=True)
-	subprocess.call("image2fits in={0}.restored out={0}.restored.fits > {1}/{2}/logs/image2fits.log 2>&1".format(imagename, out, obsid), shell=True)
-	subprocess.call("image2fits in={0}.restored.corr out={0}.restored.corr.fits > {1}/{2}/logs/image2fits.log 2>&1".format(imagename, out, obsid), shell=True)
-	#Correct fits - need to add RESTBW and end time
-	#Getting RESTBW
-	t1=pt.table("{0}.restored.corr".format(imagename), ack=False)
-	restbw=t1.getkeywords()['coords']['spectral2']['wcs']['cdelt']
-	t1.close()
-	t1=pt.table("{0}/OBSERVATION".format(g), ack=False)
-	thisendtime=t1.getcell('LOFAR_OBSERVATION_END', 0)
-	t1.close()
-	fitstofix=["{0}.restored.corr.fits".format(imagename), "{0}.restored.fits".format(imagename)]
-	for fix in fitstofix:
-		correctfits(fix, restbw, thisendtime)
+	subprocess.call("rm -rf JAWS_products", shell=True)
+	if os.path.isdir("{0}.restored.corr".format(imagename)):
+		if mosaic:
+			subprocess.call("cp -r {0}.restored.corr {0}_mosaic.restored.corr".format(imagename), shell=True)
+			subprocess.call("cp -r {0}0.avgpb {0}_mosaic0.avgpb".format(imagename), shell=True)
+			if env=="rsm-mainline":
+				if padding > 1.0:
+					#we need to correct the avgpb for mosaicing
+					print "Correcting {0} mosaic padding...".format(imagename)
+					avgpb=pt.table("{0}_mosaic0.avgpb".format(imagename), ack=False, readonly=False)
+					coordstable=avgpb.getkeyword('coords')
+					coordstablecopy=coordstable.copy()
+					value1=coordstablecopy['direction0']['crpix'][0]
+					value2=coordstablecopy['direction0']['crpix'][1]
+					value1*=padding
+					value2*=padding
+					newcrpix=np.array([value1, value2])
+					coordstablecopy['direction0']['crpix']=newcrpix
+					avgpb.putkeyword('coords', coordstablecopy)
+					avgpb.close()
+			subprocess.call("mv {0}*mosaic* {1}".format(imagename, os.path.join(out, obsid, "mosaics")), shell=True)
+		subprocess.call("addImagingInfo {0}.restored '' {6} {1} {2} > {3}/{4}/logs/addImagingInfo_standalone_{5}_log.txt 2>&1".format(imagename, localmaxb, g, out, obsid, logname, localminb), shell=True)
+		subprocess.call("addImagingInfo {0}.restored.corr '' {6} {1} {2} > {3}/{4}/logs/addImagingInfo_standalone_{5}_log.txt 2>&1".format(imagename, localmaxb, g, out, obsid, logname, localminb), shell=True)
+		subprocess.call("image2fits in={0}.restored out={0}.restored.fits > {1}/{2}/logs/image2fits.log 2>&1".format(imagename, out, obsid), shell=True)
+		subprocess.call("image2fits in={0}.restored.corr out={0}.restored.corr.fits > {1}/{2}/logs/image2fits.log 2>&1".format(imagename, out, obsid), shell=True)
+		#Correct fits - need to add RESTBW and end time
+		#Getting RESTBW
+		t1=pt.table("{0}.restored.corr".format(imagename), ack=False)
+		restbw=t1.getkeywords()['coords']['spectral2']['wcs']['cdelt']
+		t1.close()
+		t1=pt.table("{0}/OBSERVATION".format(g), ack=False)
+		thisendtime=t1.getcell('LOFAR_OBSERVATION_END', 0)
+		thisantenna=t1.getcell('LOFAR_ANTENNA_SET', 0)
+		t1.close()
+		table = pt.table("{0}.restored.corr".format(imagename), ack=False)
+		subtables = open_subtables(table)
+		ncore, nremote, nintl =  parse_stations(subtables)
+		subbandwidth = parse_subbandwidth(subtables)
+		subbands = parse_subbands(subtables)
+		close_subtables(subtables)
+		fitstofix=["{0}.restored.corr.fits".format(imagename), "{0}.restored.fits".format(imagename)]
+		for fix in fitstofix:
+			correctfits(fix, restbw, thisendtime, thisantenna, ncore, nremote, nintl, subbandwidth, subbands)
+	else:
+		print "{0} failed to image."
 	os.remove(aw_parset_name)
 
 correct_lofarroot={'/opt/share/lofar-archive/2013-06-20-19-15/LOFAR_r23543_10c8b37':'rsm-mainline', 
