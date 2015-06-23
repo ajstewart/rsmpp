@@ -66,14 +66,20 @@ def deletefile(file):
 	"""Only files not directories"""
 	os.remove(file)
 
-def fetchantenna():
+def fetchantenna(period):
 	log.info("Fetching fixinfo file...")
-	try:
-		subprocess.call("wget http://www.astron.nl/sites/astron.nl/files/cms/fixinfo.tar > /dev/null 2>&1", shell=True)
-		subprocess.call("tar xvf fixinfo.tar > /dev/null 2>&1", shell=True)
-		return True
-	except:
-		return False
+	if period==1:
+		try:
+			subprocess.call("wget http://www.astron.nl/sites/astron.nl/files/cms/fixinfo.tar > /dev/null 2>&1", shell=True)
+		except:
+			return False
+	elif period==2:
+		try:
+			subprocess.call("wget http://www.astron.nl/sites/astron.nl/files/cms/fixbeaminfo_March2015.tar > /dev/null 2>&1", shell=True)
+		except:
+			return False
+	subprocess.call("tar xvf fixinfo.tar > /dev/null 2>&1", shell=True)
+	return True
 	
 def correctantenna(ms):
 	log.info("Correcting Antenna Table for {0}...".format(ms.split("/")[-1]))
