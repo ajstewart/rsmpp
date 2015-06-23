@@ -156,8 +156,9 @@ def NDPPP_Initial(SB, wk_dir, ndppp_base, prec, precloc):
 	subprocess.call("NDPPP {0} > {1}/logs/ndppp.{2}.log 2>&1".format(ndppp_filename, curr_obs, curr_SB), shell=True)
 	os.remove(ndppp_filename)
 	
-def rficonsole(ms,obsid):
+def rficonsole(ms):
 	log.info("Running rficonsole on {0}...".format(ms))
+	obsid=ms.split("/")[-1].split("_")[0]
 	subprocess.call("rficonsole -j 1 {0} > {1}/logs/rficonsole.{2}.log 2>&1".format(ms, obsid, ms.split("/")[-1]), shell=True)
 
 def check_dataset(ms):

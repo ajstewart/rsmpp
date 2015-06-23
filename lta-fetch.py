@@ -57,9 +57,12 @@ def deletefile(file):
 	"""Only files not directories"""
 	os.remove(file)
 	
-def fetchantenna():
+def fetchantenna(period):
 	print "Fetching fixinfo file..."
-	subprocess.call("wget http://www.astron.nl/sites/astron.nl/files/cms/fixinfo.tar > /dev/null 2>&1", shell=True)
+	if period==1:
+		subprocess.call("wget http://www.astron.nl/sites/astron.nl/files/cms/fixinfo.tar > /dev/null 2>&1", shell=True)
+	elif period==2:
+		subprocess.call("wget http://www.astron.nl/sites/astron.nl/files/cms/fixbeaminfo_March2015.tar > /dev/null 2>&1", shell=True)
 	subprocess.call("tar xvf fixinfo.tar", shell=True)
 	
 def fixantenna(ms):
@@ -78,6 +81,7 @@ for file in files:
 
 #Time range of data which needs the antenna table corrected
 antenna_range=[4867430400.0, 4898793599.0]
+antenna_range2=[4928947200.0, 4931625599.0]
 
 #perform initial fetch of all data if not checkonly
 if not options.checkonly:
@@ -148,13 +152,18 @@ if options.prepare:
 				if tempst >= antenna_range[0] and tempst <= antenna_range[1]:
 					antenna_corrections.append(lta_id)
 					print "{0}\t{1}\tAntenna Tables Correction Required".format(ms_example, datetime.utcfromtimestamp(quantity('{0}s'.format(tempst)).to_unix_time()))
+					periodtocorr=1
+				elif tempst >= antenna_range2[0] and tempst <= antenna_range2[1]:
+					antenna_corrections.append(lta_id)
+					print "{0}\t{1}\tAntenna Tables Correction Required".format(ms_example, datetime.utcfromtimestamp(quantity('{0}s'.format(tempst)).to_unix_time()))
+					periodtocorr=2
 				else:
 					print "{0}\t{1}\tAntenna Tables Correction Not Required".format(ms_example, datetime.utcfromtimestamp(quantity('{0}s'.format(tempst)).to_unix_time()))
 		lta_workers.map(organise, ltaoutput3)
 		print "Organised!"
 		if len(antenna_corrections) > 0:
 			print "Performing Antenna Corrections"
-			fetchantenna()
+			fetchantenna(periodtocorr)
 			os.chdir("fixinfo")
 			antennaworkers=Pool(processes=6)
 			for a in antenna_corrections:

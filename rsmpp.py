@@ -1076,8 +1076,8 @@ Pipeline now stopping...".format(i, data_dir))
 		if rfi:
 			log.info("Starting flagging processes with rficonsole...")
 			# torfi=sorted(glob.glob(os.path.join(i,"*.MS.dppp")))
-			rficonsole_multi=partial(rsmshared.rficonsole, obsid=i)
-			worker_pool.map(rficonsole_multi, tocalibrate)
+			# rficonsole_multi=partial(rsmshared.rficonsole)
+			worker_pool.map(rsmshared.rficonsole, tocalibrate)
 		
 		log.info("Performing phaseonly calibration (and flagging if selected) on all sets...")
 		# calibrate step 2 process
