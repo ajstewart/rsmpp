@@ -1,9 +1,11 @@
-#Version 2.4.1
+#Version 2.5.0
 
-import os, subprocess,time, multiprocessing, glob, datetime, pyfits, logging, sys
+import os, subprocess,time, multiprocessing, glob, pyfits, logging, sys
 import numpy as np
 import pyrap.tables as pt
 from collections import Counter
+from datetime import datetime
+from pyrap.quanta import quantity
 
 rootpath=os.path.realpath(__file__)
 rootpath=rootpath.split("/")[:-1]
@@ -78,6 +80,36 @@ def fetchantenna():
 def correctantenna(ms):
 	log.info("Correcting Antenna Table for {0}...".format(ms.split("/")[-1]))
 	subprocess.call("./fixbeaminfo {0} > /dev/null 2>&1".format(ms), shell=True)
+	
+def renameobsids(torename):
+	basename=torename[0]
+	torename=torename[1:]
+	newtargetobs=["L{0}".format(basename),]
+	newnames={}
+	for c in range(1,len(torename)+1):
+		newnames[torename[c-1]]=basename+c
+	for name in sorted(newnames):
+		newname=newnames[name]
+		strname="L{0}".format(newname)
+		if not os.path.isdir(strname):
+			os.mkdir(strname)
+		else:
+			log.critical("New name {0} already exists! Will not overwrite.".format(strname))
+			log.critical("Please manually sort data downloaded from the LTA and re-run the pipeline wit LTA fetch off.")
+			sys.exit()
+	for name in sorted(newnames):
+		newname=newnames[name]
+		log.info("Changing L{0} --> L{1}".format(name, newname))
+		strname="L{0}".format(newname)
+		filestochange=sorted(glob.glob("L{0}/*.dppp".format(name)))
+		for file in filestochange:
+			subprocess.call("mv {0} {1}".format(file, file.replace(str(name), str(newname))), shell=True)
+		try:
+			os.rmdir("L{0}".format(name))
+		except:
+			log.warning("L{0} doesn't appear to be empty, will not delete.".format(name))
+		newtargetobs.append(strname)
+	return newtargetobs
 
 def clean(f):
 	"""Function to 'clean' a sky model. It removes double sources, A-team sources and replaces MSSS calibrators with MSSS calibrator models."""
@@ -464,7 +496,147 @@ def create_mask(beam, mask_size, toimage):
 		subprocess.call("{0} {1} {2}.temp > logs/msss_mask.log 2>&1".format(tools["msssmask"], mask, skymodel), shell=True)
 		subprocess.call(["rm", "-r", "{0}.temp".format(skymodel)])
 
-def AW_Steps(g, aw_sets, maxb, aw_env, niter, imagingmode, bandsthreshs_dict, initialiter, uvORm, userthresh, usemask, mos):
+
+def open_subtables(table):
+	"""open all subtables defined in the LOFAR format
+	args:
+	table: a pyrap table handler to a LOFAR CASA table
+	returns:
+	a dict containing all LOFAR CASA subtables
+	"""
+	subtable_names = (
+	    'LOFAR_FIELD',
+	    'LOFAR_ANTENNA',
+	    'LOFAR_HISTORY',
+	    'LOFAR_ORIGIN',
+	    'LOFAR_QUALITY',
+	    'LOFAR_STATION',
+	    'LOFAR_POINTING',
+	    'LOFAR_OBSERVATION'
+	)
+	subtables = {}
+	for subtable in subtable_names:
+		subtable_location = table.getkeyword("ATTRGROUPS")[subtable]
+		subtables[subtable] = pt.table(subtable_location, ack=False)
+	return subtables
+	
+def close_subtables(subtables):
+	for subtable_name in subtables:
+		subtables[subtable_name].close()
+	return
+
+def unique_column_values(table, column_name):
+	"""
+	Find all the unique values in a particular column of a CASA table.
+	Arguments:
+	- table:       ``pyrap.tables.table``
+	- column_name: ``str``
+	Returns:
+	- ``numpy.ndarray`` containing unique values in column.
+	"""
+	return table.query(columns=column_name, sortlist="unique %s" % (column_name)).getcol(column_name)
+
+def parse_subbands(subtables):
+	origin_table = subtables['LOFAR_ORIGIN']
+	num_chans = unique_column_values(origin_table, "NUM_CHAN")
+	if len(num_chans) == 1:
+		return num_chans[0]
+	else:
+		raise Exception("Cannot handle varying numbers of channels in image")
+
+def parse_subbandwidth(subtables):
+	# subband
+	# see http://www.lofar.org/operations/doku.php?id=operator:background_to_observations&s[]=subband&s[]=width&s[]=clock&s[]=frequency
+	freq_units = {
+	'Hz': 1,
+	'kHz': 10 ** 3,
+	'MHz': 10 ** 6,
+	'GHz': 10 ** 9,
+	}
+	observation_table = subtables['LOFAR_OBSERVATION']
+	clockcol = observation_table.col('CLOCK_FREQUENCY')
+	clock_values = unique_column_values(observation_table, "CLOCK_FREQUENCY")
+	if len(clock_values) == 1:
+		clock = clock_values[0]
+		unit = clockcol.getkeyword('QuantumUnits')[0]
+		trueclock = freq_units[unit] * clock
+		subbandwidth = trueclock / 1024
+		return subbandwidth
+	else:
+		raise Exception("Cannot handle varying clocks in image")
+
+
+def parse_stations(subtables):
+	"""Extract number of specific LOFAR stations used
+	returns:
+	(number of core stations, remote stations, international stations)
+	"""
+	observation_table = subtables['LOFAR_OBSERVATION']
+	antenna_table = subtables['LOFAR_ANTENNA']
+	nvis_used = observation_table.getcol('NVIS_USED')
+	names = np.array(antenna_table.getcol('NAME'))
+	mask = np.sum(nvis_used, axis=2) > 0
+	used = names[mask[0]]
+	ncore = nremote = nintl = 0
+	for station in used:
+		if station.startswith('CS'):
+			ncore += 1
+		elif station.startswith('RS'):
+			nremote += 1
+		else:
+			nintl += 1
+	return ncore, nremote, nintl
+
+def getdatainfo(ms):
+	t1=pt.table("{0}.img.restored.corr".format(ms), ack=False)
+	restbw=t1.getkeywords()['coords']['spectral2']['wcs']['cdelt']
+	t1.close()
+	t1=pt.table("{0}/OBSERVATION".format(ms), ack=False)
+	thisendtime=t1.getcell('LOFAR_OBSERVATION_END', 0)
+	thisantenna=t1.getcell('LOFAR_ANTENNA_SET', 0)
+	t1.close()
+	table = pt.table("{0}.img.restored.corr".format(ms), ack=False)
+	subtables = open_subtables(table)
+	ncore, nremote, nintl =  parse_stations(subtables)
+	subbandwidth = parse_subbandwidth(subtables)
+	subbands = parse_subbands(subtables)
+	close_subtables(subtables)
+	return restbw, thisendtime, thisantenna, ncore, nremote, nintl, subbandwidth, subbands
+	
+def correctfits(fits_file, bw, endt, ant, ncore, nremote, nintl, subbandwidth, subbands):
+	if type(endt)!=str:
+		endtime=datetime.utcfromtimestamp(quantity(str(endt)+'s').to_unix_time())
+		endtime=endtime.strftime("%Y-%m-%dT%H:%M:%S.%f")
+	else:
+		endtime=endt
+	fits=pyfits.open(fits_file, mode="update")
+	header=fits[0].header
+	header.update('RESTBW',bw)
+	header.update('END_UTC',endtime)
+	header.update('ANTENNA',ant)
+	header.update('NCORE',ncore)
+	header.update('NREMOTE',nremote)
+	header.update('NINTL',nintl)
+	header.update('SUBBANDS',subbands)
+	header.update('SUBBANDW',subbandwidth)
+	fits.flush()
+	fits.close()
+	
+def copyfitsinfo(fits_file):
+	fits=pyfits.open(fits_file)
+	header=fits[0].header
+	bw=header['RESTBW']
+	endt=header['END_UTC']
+	ant=header['ANTENNA']
+	ncore=header['NCORE']
+	nremote=header['NREMOTE']
+	nintl=header['NINTL']
+	subbands=header['SUBBANDS']
+	subbandwidth=header['SUBBANDW']
+	fits.close()
+	return bw, endt, ant, ncore, nremote, nintl, subbandwidth, subbands
+
+def AW_Steps(g, aw_sets, minb, maxb, aw_env, niter, imagingmode, bandsthreshs_dict, initialiter, uvORm, userthresh, usemask, mos):
 	"""
 	Performs imaging with AWimager using user supplied settings.
 	"""
@@ -481,14 +653,19 @@ def AW_Steps(g, aw_sets, maxb, aw_env, niter, imagingmode, bandsthreshs_dict, in
 	freq = ft.getcell('REF_FREQUENCY',0)
 	wave_len=c/freq
 	if uvORm == "M":
+		UVmin=minb/(wave_len*1000.)
 		UVmax=maxb/(wave_len*1000.)
 		localmaxb=maxb
+		localminb=minb
 	else:
+		UVmin=minb
 		UVmax=maxb
-		localmaxb=UVmax*wave_len*1000.
+		localminb=UVmin*(wave_len*1000.)
+		localmaxb=UVmax*(wave_len*1000.)
 	ft.close()
 	log.debug("Frequency = {0} Hz".format(freq))
 	log.debug("Wavelength = {0} m".format(wave_len))
+	log.debug("UVmin = {0}".format(UVmin))
 	log.debug("UVmax = {0}".format(UVmax))
 	beam=int(g.split("SAP")[1][:3])
 	beamc="SAP00{0}".format(beam)
@@ -506,7 +683,8 @@ def AW_Steps(g, aw_sets, maxb, aw_env, niter, imagingmode, bandsthreshs_dict, in
 image={0}.img\n\
 niter={1}\n\
 threshold={2}Jy\n\
-UVmax={3}\n".format(g, initialiter,thisthreshold,UVmax))
+UVmin={3}\n\
+UVmax={4}\n".format(g, initialiter,thisthreshold,UVmin,UVmax))
 		if usemask:
 			mask="parsets/{0}.mask".format(beamc)
 			local_parset.write("mask={0}\n".format(mask))
@@ -533,19 +711,27 @@ UVmax={3}\n".format(g, initialiter,thisthreshold,UVmax))
 image={0}.img\n\
 niter={1}\n\
 threshold={2}Jy\n\
-UVmax={3}\n".format(g, finish_iters, thresh, UVmax))
+UVmin={3}\n\
+UVmax={4}\n".format(g, finish_iters, thresh, UVmin, UVmax))
 	if usemask:
 		local_parset.write("mask={0}\n".format(mask))
 	for i in aw_sets:
 		local_parset.write(i)
 	local_parset.close()
 	subprocess.call("awimager {0} > {1}/logs/awimager_{2}_final_log.txt 2>&1".format(aw_parset_name, obsid, logname), env=aw_env, shell=True)
-	subprocess.call("image2fits in={0}.img.restored.corr out={0}.img.fits > {1}/logs/image2fits.log 2>&1".format(g, obsid), shell=True)
 	if mos:
 		subprocess.call("cp -r {0}.img.restored.corr {0}.img_mosaic.restored.corr".format(g), shell=True)
 		subprocess.call("cp -r {0}.img0.avgpb {0}.img_mosaic0.avgpb".format(g), shell=True)
-	subprocess.call("addImagingInfo {0}.img.restored.corr '' 0 {3} {0} > {1}/logs/addImagingInfo_{2}_log.txt 2>&1".format(g, obsid, logname, localmaxb), shell=True)
+	subprocess.call("addImagingInfo {0}.img.restored '' {4} {3} {0} > {1}/logs/addImagingInfo_{2}_log.txt 2>&1".format(g, obsid, logname, localmaxb, localminb), shell=True)
+	subprocess.call("addImagingInfo {0}.img.restored.corr '' {4} {3} {0} > {1}/logs/addImagingInfo_{2}_log.txt 2>&1".format(g, obsid, logname, localmaxb, localminb), shell=True)
+	subprocess.call("image2fits in={0}.img.restored out={0}.img.restored.fits > {1}/logs/image2fits.log 2>&1".format(g, obsid), shell=True)
+	subprocess.call("image2fits in={0}.img.restored.corr out={0}.img.restored.corr.fits > {1}/logs/image2fits.log 2>&1".format(g, obsid), shell=True)
 	os.remove(aw_parset_name)
+	restbw, thisendtime, thisantenna, ncore, nremote, nintl, subbandwidth, subbands=getdatainfo(g)
+	fitstofix=["{0}.img.restored.corr.fits".format(g), "{0}.img.restored.fits".format(g)]
+	for fix in fitstofix:
+		correctfits(fix, restbw, thisendtime, thisantenna, ncore, nremote, nintl, subbandwidth, subbands)
+	
 
 def wavelength(f):
 	return 299792458./f
@@ -704,7 +890,8 @@ def Median_clip(arr, sigma=3, max_iter=3, ftol=0.01, xtol=0.05, full_output=Fals
 def average_band_images(snap, beams):
 	for b in beams:
 		log.info("Averaging {0} SAP00{1}...".format(snap, b))
-		subprocess.call("{0} {1}/images/{1}_SAP00{2}_AVG {1}/images/*SAP00{2}_BAND0?*MS.dppp.img.fits > {1}/logs/average_SAP00{2}_log.txt 2>&1".format(tools["average"], snap, b), shell=True)
+		subprocess.call("{0} {1}/images/{1}_SAP00{2}_AVG.restored {1}/images/*SAP00{2}_BAND0?*MS.dppp.img.restored.fits > {1}/logs/average_SAP00{2}_restored.log.txt 2>&1".format(tools["average"], snap, b), shell=True)
+		subprocess.call("{0} {1}/images/{1}_SAP00{2}_AVG {1}/images/*SAP00{2}_BAND0?*MS.dppp.img.restored.corr.fits > {1}/logs/average_SAP00{2}_restored.corr.log.txt 2>&1".format(tools["average"], snap, b), shell=True)
 	
 def create_mosaic(snap, band_nums, chosen_environ, pad, avgpbr, ncp):
 	for b in band_nums:
@@ -739,6 +926,9 @@ def create_mosaic(snap, band_nums, chosen_environ, pad, avgpbr, ncp):
 			subprocess.call("python {0} -o {1} -N -a avgpbz -s {2} {3} > {4}/logs/mosaic_band0{5}_log.txt 2>&1".format(tools["mosaic"], m_name, m_sens_name, ",".join(m_list), snap, b), shell=True)
 		else:
 			subprocess.call("python {0} -o {1} -a avgpbz -s {2} {3} > {4}/logs/mosaic_band0{5}_log.txt 2>&1".format(tools["mosaic"], m_name, m_sens_name, ",".join(m_list), snap, b), shell=True)
+		correctedfits=m_list[0].replace("_mosaic", "")+".restored.corr.fits"
+		bw, endt, ant, ncore, nremote, nintl, subbandwidth, subbands=copyfitsinfo(correctedfits)
+		correctfits(m_name, bw, endt, ant, ncore, nremote, nintl, subbandwidth, subbands)
 
 correct_lofarroot={'/opt/share/lofar-archive/2013-06-20-19-15/LOFAR_r23543_10c8b37':'rsm-mainline', '/opt/share/lofar/2013-09-30-16-27/LOFAR_r26772_1374418':'lofar-sept2013', '/opt/share/lofar/2014-01-22-15-21/LOFAR_r28003_357357b':'lofar-jan2014'}
 

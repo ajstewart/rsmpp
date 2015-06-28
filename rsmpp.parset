@@ -70,6 +70,7 @@ imaging=off
 imagingmode=parset ; 'parset' or 'auto'
 toimage=obsbands ; 'obsbands', 'finalbands' or 'both'
 maxbunit=UV
+minbaseline=0.0
 maxbaseline=3.0
 mask=off
 mosaic=off

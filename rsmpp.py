@@ -7,9 +7,9 @@
 #A full user guide can be found on google docs here:
 # https://docs.google.com/document/d/1aqUxesq4I02i1mKJw_XHjLy0smCbL37uhtBpNf9rs9w
 
-#Written by Adam Stewart, Last Update October 2014
+#Written by Adam Stewart, Last Update June 2015
 
-#---Version 2.4.2---
+#---Version 2.5.0---
 
 import subprocess, multiprocessing, os, glob, optparse, sys, string, getpass, time, logging, ConfigParser, base64
 from functools import partial
@@ -21,7 +21,7 @@ from itertools import izip
 import numpy as np
 #import stuff for email
 import emailslofar as em
-vers="2.4.2"	#Current version number
+vers="2.5.0"	#Current version number
 
 import rsmppfuncs as rsmshared
 
@@ -159,7 +159,8 @@ group.add_option("--toimage", action="store", type="choice", choices=['obsbands'
 group.add_option("-I", "--rsminitialiter", action="store", type="int", dest="initialiter", default=config.getint("IMAGING", "rsminitialiter"),help="Define how many cleaning iterations should be performed in order to estimate the threshold [default: %default]")
 group.add_option("-R", "--rsmbandrms", action="store", type="string", dest="bandrms", default=config.get("IMAGING", "rsmbandrms"),help="Define the prior level of expected band RMS for use in automatic cleaning, enter as '0.34,0.23,..' no spaces, in units of Jy [default: %default]")
 group.add_option("-U", "--maxbunit", action="store", type="choice", dest="maxbunit", choices=['UV', 'm',], default=config.get("IMAGING", "maxbunit"),help="Choose which method to limit the baselines, enter 'UV' for UVmax (in klambda) or 'm' for physical length (in metres) [default: %default]")
-group.add_option("-L", "--maxbaseline", action="store", type="int", dest="maxbaseline", default=config.getfloat("IMAGING", "maxbaseline"),help="Enter the maximum baseline to image out to, making sure it corresponds to the unit options [default: %default]")
+group.add_option("-K", "--minbaseline", action="store", type="int", dest="minbaseline", default=config.getfloat("IMAGING", "minbaseline"),help="Enter the minimum baseline to image out to, making sure it corresponds to the unit option [default: %default]")
+group.add_option("-L", "--maxbaseline", action="store", type="int", dest="maxbaseline", default=config.getfloat("IMAGING", "maxbaseline"),help="Enter the maximum baseline to image out to, making sure it corresponds to the unit option [default: %default]")
 group.add_option("-m", "--mask", action="store_true", dest="mask", default=config.getboolean("IMAGING", "mask"), help="Use option to use a mask when cleaning [default: %default]")
 group.add_option("-M", "--mosaic", action="store_true", dest="mosaic", default=config.getboolean("IMAGING", "mosaic"),help="Use option to produce snapshot, band, mosaics after imaging [default: %default]")
 group.add_option("--avgpbradius", action="store", type="float", dest="avgpbrad", default=config.get("IMAGING", "avgpbrad"),help="Choose radius for which avgpbz.py trims the primary beam when mosaicing [default: %default]")
@@ -251,7 +252,8 @@ imagingmode=options.imagingmode	#which imaging mode to be used
 initialiters=options.initialiter #Initial imaging iterations
 bandthreshs=options.bandrms	#the band thresholds
 maxbunit=options.maxbunit.upper()	#unit of maximum baseline lenght (UV or M)
-maxb=options.maxbaseline	#The maximum baselines to use (keeping in mind the unit)
+minb=options.minbaseline	#The minimum baseline to use (keeping in mind the unit)
+maxb=options.maxbaseline	#The maximum baseline to use (keeping in mind the unit)
 mask=options.mask	#no mask
 mosaic=options.mosaic	#mosaic on off
 avpbrad=options.avgpbrad	#avgpbz radius
@@ -683,7 +685,38 @@ else:
 				log.warning("Switching to process the data downloaded from the LTA.")
 				to_process=uniq_ltaobsids
 				target_obs=to_process
-					
+				#Check again
+				if len(to_process) < minimum_obstorun[mastermode]:
+					log.critical("Number of observations to process ({0}) does not match the minimum required for {1} mode ({2})".format(len(to_process), mastermode, minimum_obstorun[mastermode]))
+					log.critical("Please check the observations and re-run the pipeline skipping the LTA fetch.")
+					log.critical("Pipeline now stopping...")
+					sys.exit()
+			#Here we check that the data is ok for int mode - i.e. this means obsids are sequential, doesn't matter for sim and that there are an even number of obs
+			if mastermode=="INT":
+				log.info("Checking fetched observations for compatibility with INT mode...")
+				if len(target_obs)%2!=0:
+					log.critical("There are not an even number of observations to process for INT mode!")
+					log.critical("Please check the observations and re-run the pipeline skipping the LTA fetch.")
+					log.critical("Pipeline now stopping...")
+				target_obs_nums=[int(num.replace("L", "")) for num in target_obs]
+				diffs=np.diff(target_obs_nums)[::2]
+				diffpass=True
+				for d in diffs:
+					if d !=1:
+						diffpass=False
+						break
+				if not diffpass:
+					log.warning("Calibrator and target pairs are not sequential")
+					log.warning("All Observation IDs will be renamed such that they are sequential")
+					target_obs=rsmshared.renameobsids(target_obs_nums)
+					to_process=target_obs
+				else:
+					log.info("Observations compatible.")
+				#Calibrator is always usually first so lets make sure it is correct
+				if int(target_obs[0].split("L")[-1])%2==0:
+					target_oddeven="odd"
+				else:
+					target_oddeven="even"
 			log.info("Data ready for pipeline use!")
 			log.info("Removing LTA tar files...")
 			lta_workers.map(rsmshared.deletefile, ltaoutput)
@@ -699,6 +732,11 @@ else:
 			log.critical("Please check your mode and observations to run.")
 			log.critical("Pipeline now stopping...")
 			sys.exit()
+			if mastermode=="INT":
+				if len(to_process)%2!=0:
+					log.critical("There are not an even number of observations to process for INT mode!")
+					log.critical("Please check the observations and re-run the pipeline once corrected.")
+					log.critical("Pipeline now stopping...")
 	
 	#----------------------------------------------------------------------------------------------------------------------------------------------
 	#																Load in User List and Check Data Presence
@@ -1148,6 +1186,7 @@ Pipeline now stopping...".format(i, data_dir))
 			else:
 				toimage=sorted(glob.glob("final_datasets/*BAND*.MS.dppp"))
 			log.info("Starting imaging process with AWimager...")
+			os.mkdir("JAWS_products")
 			log.info("Imaging mode: {0}".format(imagingmode))
 			log.info("Imaging: {0}".format(setstoimage))
 			if imagingmode=="auto":
@@ -1166,26 +1205,33 @@ Pipeline now stopping...".format(i, data_dir))
 			userthresh=0.0
 			userpad=1.0
 			for s in aw_sets:
-				if "ms=" in s or "image=" in s or "UVmax=" in s:
+				if "ms=" in s or "image=" in s:
 					to_remove.append(s)
-				if "npix=" in s or "cellsize=" in s or "data=" in s:
+				elif "UVmin=" in s:
+					minb=float(s.split("=")[1])
+					to_remove.append(s)
+				elif "UVmax=" in s:
+					maxb=float(s.split("=")[1])
+					to_remove.append(s)
+				elif "npix=" in s or "cellsize=" in s or "data=" in s:
 					mask_size+=" "+s.strip('\n')
-				if "niter=" in s:
+				elif "niter=" in s:
 					niters=int(s.split("=")[1])
 					to_remove.append(s)
-				if "threshold=" in s:
+				elif "threshold=" in s:
 					userthresh=float(s.split("=")[1].replace("Jy", ""))
 					to_remove.append(s)
-				if "padding=" in s:
+				elif "padding=" in s:
 					userpad=float(s.split("=")[1])
 			for j in to_remove:
 				aw_sets.remove(j)
-			log.info("Maximum baseline to image: {0} {1}".format(maxb, maxbunit))
+			
+			log.info("Baseline range to image: {0} - {1} ({2})".format(minb, maxb, maxbunit))
 			if mask:
 				create_mask_multi=partial(rsmshared.create_mask, mask_size=mask_size, toimage=toimage)
 				if __name__ == '__main__':
 					worker_pool.map(create_mask_multi,beams)
-			AW_Steps_multi=partial(rsmshared.AW_Steps, aw_sets=aw_sets, maxb=maxb, aw_env=awimager_environ, niter=niters, imagingmode=imagingmode,
+			AW_Steps_multi=partial(rsmshared.AW_Steps, aw_sets=aw_sets, minb=minb, maxb=maxb, aw_env=awimager_environ, niter=niters, imagingmode=imagingmode,
 			bandsthreshs_dict=bandsthreshs_dict, initialiter=initialiters, uvORm=maxbunit, usemask=mask, userthresh=userthresh, mos=mosaic)
 			if __name__ == '__main__':
 				pool = Pool(processes=2)
@@ -1194,6 +1240,7 @@ Pipeline now stopping...".format(i, data_dir))
 			log.info("Done!")
 
 			log.info("Tidying up imaging...")
+			os.rmdir("JAWS_products")
 			if setstoimage=="obsbands":
 				imagetargetobs=target_obs
 			elif setstoimage=="finalbands":
