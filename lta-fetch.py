@@ -61,9 +61,10 @@ def fetchantenna(period):
 	print "Fetching fixinfo file..."
 	if period==1:
 		subprocess.call("wget http://www.astron.nl/sites/astron.nl/files/cms/fixinfo.tar > /dev/null 2>&1", shell=True)
+		subprocess.call("tar xvf fixinfo.tar", shell=True)
 	elif period==2:
 		subprocess.call("wget http://www.astron.nl/sites/astron.nl/files/cms/fixbeaminfo_March2015.tar > /dev/null 2>&1", shell=True)
-	subprocess.call("tar xvf fixinfo.tar", shell=True)
+		subprocess.call("tar xvf fixbeaminfo_March2015.tar", shell=True)
 	
 def fixantenna(ms):
 	print "Correcting Antenna Table for {0}...".format(ms.split("/")[-1])
@@ -164,7 +165,10 @@ if options.prepare:
 		if len(antenna_corrections) > 0:
 			print "Performing Antenna Corrections"
 			fetchantenna(periodtocorr)
-			os.chdir("fixinfo")
+			if periodtocorr==1:
+				os.chdir("fixinfo")
+			else:
+				os.chdir("fixbeaminfo")
 			antennaworkers=Pool(processes=6)
 			for a in antenna_corrections:
 				tocorrect=sorted(glob.glob(os.path.join("..",a,"*.dppp")))

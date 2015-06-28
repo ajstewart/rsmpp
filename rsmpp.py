@@ -660,7 +660,10 @@ else:
 				log.info("Performing Antenna Corrections")
 				gotfixinfo=rsmshared.fetchantenna(periodtocorr)
 				if gotfixinfo:
-					os.chdir("fixinfo")
+					if periodtocorr==1:
+						os.chdir("fixinfo")
+					else:
+						os.chdir("fixbeaminfo")
 					antenna_workers=Pool(processes=n)
 					for a in antenna_corrections:
 						tocorrect=sorted(glob.glob(os.path.join("..",a,"*.dppp")))
