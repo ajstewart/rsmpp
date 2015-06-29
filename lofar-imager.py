@@ -8,31 +8,9 @@ import numpy as np
 from datetime import datetime
 from pyrap.quanta import quantity
 
-usage = "usage: python %prog [options] $MSs/to/image "
-description="A generic mass imaging script for LOFAR data using the AWimager. Takes care of naming, UV ranges, fits, masks, mosaicing and time split imaging.\
-The data used must be in the format of 'L123456_SAP000_BAND01.MS.dppp'. Script originated from rsm_imager.py"
-vers="6.0"
-
-parser = optparse.OptionParser(usage=usage, version="%prog v{0}".format(vers), description=description)
-parser.add_option("--mask", action="store_true", dest="mask", default=False, help="Use option to use a mask when cleaning [default: %default]")
-parser.add_option("-A", "--automaticthresh", action="store_true", dest="automaticthresh", default=False,help="Switch on automatic threshold method of cleaning [default: %default]")
-parser.add_option("-I", "--initialiter", action="store", type="int", dest="initialiter", default=2500,help="Define how many cleaning iterations should be performed in order to estimate the threshold [default: %default]")
-parser.add_option("-b", "--bandthreshs", action="store", type="string", dest="bandthreshs", default="0.053,0.038,0.035,0.028",help="Define the prior level of threshold to clean to for each band enter as '0.34,0.23,..' no spaces, in units of Jy [default: %default]")
-parser.add_option("-u", "--maxbunit", action="store", type="string", dest="maxbunit", default="M",help="Choose which method to limit the baselines, enter 'UV' for UVmax (in klambda) or 'M' for physical length (in metres) [default: %default]")
-parser.add_option("-l", "--maxbaseline", action="store", type="float", dest="maxbaseline", default=6000,help="Enter the maximum baseline to image out to, making sure it corresponds to the unit options [default: %default]")
-parser.add_option("-m", "--mosaic", action="store_true", dest="mosaic", default=False, help="Also generate mosaics [default: %default]")
-parser.add_option("-r", "--avgpbradius", action="store", type="float", dest="avgpbr", default=0.5, help="Radius beyond which to zero avgpb values (expressed as fraction of image width) [default: %default]")
-parser.add_option("-N", "--NCPmos", action="store_true", dest="ncp", default=False, help="Use this option if mosaicing the NCP [default: %default]")
-parser.add_option("-n", "--nice", action="store", type="int", dest="nice", default=5, help="Set the niceness level [default: %default]")
-parser.add_option("-o", "--output", action="store", type="string", dest="output", default="images_standalone", help="Specify the name of the images folder that will hold the results. [default: %default]")
-parser.add_option("-p", "--parset", action="store", type="string", dest="parset", default="aw.parset", help="Define parset to use containing AWimager options [default: %default]")
-parser.add_option("-t", "--time", action="store", type="float", dest="time", default=-1.0, help="Select a time interval in which to image the datasets (in secs) [default: %default]")
-parser.add_option("-w", "--overwrite", action="store_true", dest="overwrite", default=False, help="Select whether to overwrite previous results directory [default: %default]")
-(options, args) = parser.parse_args()
-
 def convert_newawimager(environ):
 	"""
-	Returns an environment that utilises the new version of the AWimager.
+	Returns an environment that utilises the new version of the AWimager. Used for RSM environment.
 	"""
 	new_envrion=environ
 	environ['LOFARROOT']="/opt/share/lofar-archive/2013-02-11-16-46/LOFAR_r_b0fc3f4"
@@ -41,7 +19,7 @@ def convert_newawimager(environ):
 	environ['PYTHONPATH']="/opt/share/soft/pathdirs/python-packages:/opt/share/lofar-archive/2013-02-11-16-46/pathdirs/python-packages"
 	return new_envrion
 
-def setup(out, maxunit, autothresh, bthreshs, oids, mos, msk):
+def setup(out, autothresh, bthreshs, oids, mos, msk):
 	bandsthreshs_dict={}
 	if checkdir(out):
 		if options.overwrite:
@@ -61,15 +39,11 @@ def setup(out, maxunit, autothresh, bthreshs, oids, mos, msk):
 		else:
 			os.mkdir(out)
 	for o in oids:
-		if mos:
-			os.makedirs(os.path.join(out, o, "mosaics"))
-			os.makedirs(os.path.join(out, o, "logs"))
-		else:
-			os.makedirs(os.path.join(out, o, "logs"))
-	allowedunits=['UV', 'M']
-	if maxunit not in allowedunits:
-		print "Selected maximum baseline length unit is not valid"
-		return False, bandsthreshs_dict
+		# if mos:
+		os.makedirs(os.path.join(out, o, "mosaics"))
+		os.makedirs(os.path.join(out, o, "logs"))
+		# else:
+			# os.makedirs(os.path.join(out, o, "logs"))
 	if autothresh:
 		tempbandsthresh=bthreshs.split(",")
 		if len(tempbandsthresh) < 0:
@@ -91,17 +65,18 @@ def check_time(intvl):
 			on="Error"
 		else:
 			print "Time Split Mode: ON"
-			print "Going to image in {0} minute time intervals".format(round(intv/60., 4))
+			print "Going to image in {0} second time intervals".format(intv)
 		on=True
 	else:
 		on=False
 	print "----------------------------------------------------------"
 	return on
 	
-def extract_parset(p, out, msk, mos, mxb):
+def extract_parset(p, out, msk, mos, mnb, mxb, bunit):
 	if not checkpres(p):
 		print "Parset file {0} cannot be found".format(parset)
 		aw_sets=False
+		return aw_sets, False, False, False, False
 	else:
 		userthresh=0.0
 		pad=1.0
@@ -110,25 +85,42 @@ def extract_parset(p, out, msk, mos, mxb):
 		temp.close()
 		mask_size=""
 		to_remove=[]
+		parsetminb=-1.0
+		parsetmaxb=-1.0
 		for s in aw_sets:
 			if s.startswith('#'):
 				continue
-			if "npix=" in s or "cellsize=" in s or "data=" in s:
+			elif "ms=" in s:
+				to_remove.append(s)
+			elif "image=" in s:
+				to_remove.append(s)
+			elif "npix=" in s or "cellsize=" in s or "data=" in s:
 				mask_size+=" "+s.strip('\n')
-			if "niter=" in s:
+			elif "niter=" in s:
 				niters=int(s.split("=")[1])
 				to_remove.append(s)
-			if "threshold=" in s:
+			elif "threshold=" in s:
 				userthresh=float(s.split("=")[1].replace("Jy", ""))
 				to_remove.append(s)
-			if "pad" in s:
+			elif "pad" in s:
 				pad=float(s.split("=")[1])
+			elif "UVmin=" in s:
+				parsetminb=float(s.split("=")[1])
+				to_remove.append(s)
+			elif "UVmax=" in s:
+				parsetmaxb=float(s.split("=")[1])
+				to_remove.append(s)
 		for j in to_remove:
 			aw_sets.remove(j)
+		if parsetminb!=-1.0:
+			mnb=parsetminb
+		if parsetmaxb!=-1.0:
+			mxb=parsetmaxb
 		print "Parset settings..."
 		for a in aw_sets:
 			print a.rstrip("\n")
-		print "Maximum Baseline to image: {0} {1}".format(mxb, maxbunit)
+		print "Minimum Baseline to image: {0} {1}".format(mnb, bunit)
+		print "Maximum Baseline to image: {0} {1}".format(mxb, bunit)
 		print "User threshold: {0}Jy".format(userthresh)
 		print "User iterations: {0}".format(niters)
 		if msk:
@@ -143,8 +135,8 @@ def extract_parset(p, out, msk, mos, mxb):
 		print "Your chance to cancel (Ctrl-c) if something is wrong!..."
 		time.sleep(10)
 		subprocess.call(["cp", p, os.path.join(out, "aw.parset_used")])
-	return aw_sets, niters, userthresh, mask_size, pad
-	
+		return aw_sets, niters, userthresh, mask_size, pad, mnb, mxb
+
 def check_msformat(mssets):
 	print "Checking Measurement Sets to Image..."
 	#store the information of ms to image as well as example MS
@@ -290,6 +282,34 @@ def create_mask(todo, mask_size, out):
 		print "Creating {0} {1} mask...".format(id, beam)
 		subprocess.call("/home/as24v07/scripts/msss_mask.py {0} {1}.temp > {2} 2>&1".format(mask, skymodel, os.path.join(out, "masks", g+".log")), shell=True)
 		subprocess.call(["rm", "-r", "{0}.temp".format(skymodel)])
+		
+def splitdataset(dataset, interval, out):
+	name=dataset.split("/")[-1]
+	print "Splitting {0} by {1} sec intervals...".format(name ,interval)
+	t = pt.table(dataset, ack=False)
+	starttime = t[0]['TIME']
+	endtime   = t[t.nrows()-1]['TIME']
+	numberofsplits=int((endtime-starttime)/interval)
+	for split in range(0, numberofsplits):
+		outputname=os.path.join(out, "splitMS", name+".{0}sec_{1:04d}.split".format(int(interval), split+1))
+		if split==0:
+			thisstart=starttime-2.
+		else:
+			thisstart=starttime+(float(split)*interval)
+		thisend=starttime+((float(split)+1)*interval)
+		t1 = t.query('TIME > ' + str(thisstart) + ' && \
+		TIME < ' + str(thisend), sortlist='TIME,ANTENNA1,ANTENNA2')
+		t1.copy(outputname, True)
+		t1.close()
+		if split==0:
+			thisstart+=2.
+		t1=pt.table(outputname+"/OBSERVATION", ack=False, readonly=False)
+		thistimerange=np.array([thisstart, thisend])
+		t1.putcell('TIME_RANGE', 0, thistimerange)
+		t1.putcell('LOFAR_OBSERVATION_START', 0, thisstart)
+		t1.putcell('LOFAR_OBSERVATION_END', 0, thisend)
+		t1.close()
+	t.close()
 
 def create_mosaics(tomos, out, time_mode, avgpbrad, usencp):
 	tomos_info=tomos.split("_")
@@ -297,19 +317,25 @@ def create_mosaics(tomos, out, time_mode, avgpbrad, usencp):
 	mos_band=tomos_info[1]
 	if time_mode:
 		allimages=sorted(glob.glob(os.path.join(out, mos_obsid, "mosaics", "*{0}*.restored.corr".format(mos_band))))
-		max_window=max([int(w.split("window")[-1][:3]) for w in allimages])
+		max_window=max([int(w.split(".split")[0].split("_")[-1]) for w in allimages])
 		for window in range(1, max_window+1):
-			images=sorted(glob.glob(os.path.join(out, mos_obsid, "mosaics", "*{0}*window{1:03d}*.restored.corr".format(mos_band, window))))
-			avgpbs=sorted(glob.glob(os.path.join(out, mos_obsid, "mosaics", "*{0}*window{1:03d}*.avgpb".format(mos_band, window))))
+			images=sorted(glob.glob(os.path.join(out, mos_obsid, "mosaics", "*{0}*_{1:04d}.split*.restored.corr".format(mos_band, window))))
+			avgpbs=sorted(glob.glob(os.path.join(out, mos_obsid, "mosaics", "*{0}*_{1:04d}.split*.avgpb".format(mos_band, window))))
 			for pb in avgpbs:
 				print "Zeroing corners of avgpb {0}...".format(pb)
 				subprocess.call("python /home/as24v07/scripts/avgpbz.py -r {0} {1}".format(avgpbrad, pb), shell=True)
 			images_formatted=[j.replace(".restored.corr", "") for j in images]
 			images_cmd=",".join(images_formatted)
 			print "Creating Mosaic for {0} {1} Window {2}...".format(mos_obsid, mos_band, window)
-			mosname=os.path.join(out, mos_obsid, "mosaics", "{0}_{1}_window{2:03d}_mosaic.fits".format(mos_obsid, mos_band, window))
-			sensname=os.path.join(out, mos_obsid, "mosaics", "{0}_{1}_window{2:03d}_mosaic_sens.fits".format(mos_obsid, mos_band, window))
-			subprocess.call("python /home/as24v07/scripts/mos.py -a avgpbz -o {0} -s {1} {2}".format(mosname, sensname, images_cmd), shell=True)
+			mosname=os.path.join(out, mos_obsid, "mosaics", "{0}_{1}_window{2:04d}_mosaic.fits".format(mos_obsid, mos_band, window))
+			sensname=os.path.join(out, mos_obsid, "mosaics", "{0}_{1}_window{2:04d}_mosaic_sens.fits".format(mos_obsid, mos_band, window))
+			if usencp:
+				subprocess.call("python /home/as24v07/scripts/mos.py -N -a avgpbz -o {0} -s {1} {2}".format(mosname, sensname, images_cmd), shell=True)
+			else:
+				subprocess.call("python /home/as24v07/scripts/mos.py -a avgpbz -o {0} -s {1} {2}".format(mosname, sensname, images_cmd), shell=True)
+			correctedfits=os.path.join(out, mos_obsid, images_formatted[0].split("/")[-1].replace("_mosaic", "")+".restored.corr.fits")
+			bw, endt, ant, ncore, nremote, nintl, subbandwidth, subbands=copyfitsinfo(correctedfits)
+			correctfits(mosname, bw, endt, ant, ncore, nremote, nintl, subbandwidth, subbands)
 	else:
 		images=sorted(glob.glob(os.path.join(out, mos_obsid, "mosaics", "*{0}*.restored.corr".format(mos_band))))
 		avgpbs=sorted(glob.glob(os.path.join(out, mos_obsid, "mosaics", "*{0}*.avgpb".format(mos_band))))
@@ -325,8 +351,150 @@ def create_mosaics(tomos, out, time_mode, avgpbrad, usencp):
 			subprocess.call("python /home/as24v07/scripts/mos.py -N -a avgpbz -o {0} -s {1} -a avgpbz {2}".format(mosname, sensname, images_cmd), shell=True)
 		else:
 			subprocess.call("python /home/as24v07/scripts/mos.py -a avgpbz -o {0} -s {1} -a avgpbz {2}".format(mosname, sensname, images_cmd), shell=True)
+		correctedfits=os.path.join(out, mos_obsid, images_formatted[0].split("/")[-1].replace("_mosaic", "")+".restored.corr.fits")
+		bw, endt, ant, ncore, nremote, nintl, subbandwidth, subbands=copyfitsinfo(correctedfits)
+		correctfits(mosname, bw, endt, ant, ncore, nremote, nintl, subbandwidth, subbands)
+			
+def open_subtables(table):
+	"""open all subtables defined in the LOFAR format
+	args:
+	table: a pyrap table handler to a LOFAR CASA table
+	returns:
+	a dict containing all LOFAR CASA subtables
+	"""
+	subtable_names = (
+	    'LOFAR_FIELD',
+	    'LOFAR_ANTENNA',
+	    'LOFAR_HISTORY',
+	    'LOFAR_ORIGIN',
+	    'LOFAR_QUALITY',
+	    'LOFAR_STATION',
+	    'LOFAR_POINTING',
+	    'LOFAR_OBSERVATION'
+	)
+	subtables = {}
+	for subtable in subtable_names:
+		subtable_location = table.getkeyword("ATTRGROUPS")[subtable]
+		subtables[subtable] = pt.table(subtable_location, ack=False)
+	return subtables
+	
+def close_subtables(subtables):
+	for subtable_name in subtables:
+		subtables[subtable_name].close()
+	return
 
-def AW_Steps(g, usemask, aw_env, nit, maxb, initialiters, mosaic, automaticthresh, bandsthreshs_dict, uvORm, userthresh, padding, out, env):
+def unique_column_values(table, column_name):
+	"""
+	Find all the unique values in a particular column of a CASA table.
+	Arguments:
+	- table:       ``pyrap.tables.table``
+	- column_name: ``str``
+	Returns:
+	- ``numpy.ndarray`` containing unique values in column.
+	"""
+	return table.query(columns=column_name, sortlist="unique %s" % (column_name)).getcol(column_name)
+
+def parse_subbands(subtables):
+	origin_table = subtables['LOFAR_ORIGIN']
+	num_chans = unique_column_values(origin_table, "NUM_CHAN")
+	if len(num_chans) == 1:
+		return num_chans[0]
+	else:
+		raise Exception("Cannot handle varying numbers of channels in image")
+
+def parse_subbandwidth(subtables):
+	# subband
+	# see http://www.lofar.org/operations/doku.php?id=operator:background_to_observations&s[]=subband&s[]=width&s[]=clock&s[]=frequency
+	freq_units = {
+	'Hz': 1,
+	'kHz': 10 ** 3,
+	'MHz': 10 ** 6,
+	'GHz': 10 ** 9,
+	}
+	observation_table = subtables['LOFAR_OBSERVATION']
+	clockcol = observation_table.col('CLOCK_FREQUENCY')
+	clock_values = unique_column_values(observation_table, "CLOCK_FREQUENCY")
+	if len(clock_values) == 1:
+		clock = clock_values[0]
+		unit = clockcol.getkeyword('QuantumUnits')[0]
+		trueclock = freq_units[unit] * clock
+		subbandwidth = trueclock / 1024
+		return subbandwidth
+	else:
+		raise Exception("Cannot handle varying clocks in image")
+
+
+def parse_stations(subtables):
+	"""Extract number of specific LOFAR stations used
+	returns:
+	(number of core stations, remote stations, international stations)
+	"""
+	observation_table = subtables['LOFAR_OBSERVATION']
+	antenna_table = subtables['LOFAR_ANTENNA']
+	nvis_used = observation_table.getcol('NVIS_USED')
+	names = np.array(antenna_table.getcol('NAME'))
+	mask = np.sum(nvis_used, axis=2) > 0
+	used = names[mask[0]]
+	ncore = nremote = nintl = 0
+	for station in used:
+		if station.startswith('CS'):
+			ncore += 1
+		elif station.startswith('RS'):
+			nremote += 1
+		else:
+			nintl += 1
+	return ncore, nremote, nintl
+
+def getdatainfo(ms, imagename):
+	t1=pt.table("{0}.restored.corr".format(imagename), ack=False)
+	restbw=t1.getkeywords()['coords']['spectral2']['wcs']['cdelt']
+	t1.close()
+	t1=pt.table("{0}/OBSERVATION".format(ms), ack=False)
+	thisendtime=t1.getcell('LOFAR_OBSERVATION_END', 0)
+	thisantenna=t1.getcell('LOFAR_ANTENNA_SET', 0)
+	t1.close()
+	table = pt.table("{0}.restored.corr".format(imagename), ack=False)
+	subtables = open_subtables(table)
+	ncore, nremote, nintl =  parse_stations(subtables)
+	subbandwidth = parse_subbandwidth(subtables)
+	subbands = parse_subbands(subtables)
+	close_subtables(subtables)
+	return restbw, thisendtime, thisantenna, ncore, nremote, nintl, subbandwidth, subbands
+
+def correctfits(fits_file, bw, endt, ant, ncore, nremote, nintl, subbandwidth, subbands):
+	if type(endt)!=str:
+		endtime=datetime.utcfromtimestamp(quantity(str(endt)+'s').to_unix_time())
+		endtime=endtime.strftime("%Y-%m-%dT%H:%M:%S.%f")
+	else:
+		endtime=endt
+	fits=pyfits.open(fits_file, mode="update")
+	header=fits[0].header
+	header.update('RESTBW',bw)
+	header.update('END_UTC',endtime)
+	header.update('ANTENNA',ant)
+	header.update('NCORE',ncore)
+	header.update('NREMOTE',nremote)
+	header.update('NINTL',nintl)
+	header.update('SUBBANDS',subbands)
+	header.update('SUBBANDW',subbandwidth)
+	fits.flush()
+	fits.close()
+	
+def copyfitsinfo(fits_file):
+	fits=pyfits.open(fits_file)
+	header=fits[0].header
+	bw=header['RESTBW']
+	endt=header['END_UTC']
+	ant=header['ANTENNA']
+	ncore=header['NCORE']
+	nremote=header['NREMOTE']
+	nintl=header['NINTL']
+	subbands=header['SUBBANDS']
+	subbandwidth=header['SUBBANDW']
+	fits.close()
+	return bw, endt, ant, ncore, nremote, nintl, subbandwidth, subbands
+	
+def AW_Steps(g, usemask, aw_env, nit, minb, maxb, initialiters, mosaic, automaticthresh, bandsthreshs_dict, uvORm, userthresh, padding, out, env, time_mode, interval):
 	"""
 	Performs imaging with AWimager using user supplied settings.
 	"""
@@ -341,13 +509,17 @@ def AW_Steps(g, usemask, aw_env, nit, maxb, initialiters, mosaic, automaticthres
 	freq = ft.getcell('REF_FREQUENCY',0)
 	wave_len=c/freq
 	if uvORm == "M":
+		UVmin=minb/(wave_len*1000.)
 		UVmax=maxb/(wave_len*1000.)
 		localmaxb=maxb
+		localminb=minb
 	else:
+		UVmin=minb
 		UVmax=maxb
+		localminb=UVmin*(wave_len*1000.)
 		localmaxb=UVmax*(wave_len*1000.)
 	ft.close()
-	print "Wavelength = {0:00.02f} m / UVmax = {1}".format(wave_len, UVmax)
+	# print "Wavelength = {0:00.02f} m / UVmin = {2}, UVmax = {1}".format(wave_len, UVmax, UVmin)
 	beam=int(g.split("SAP")[1][:3])
 	beamc="SAP00{0}".format(beam)
 	finish_iters=nit
@@ -361,7 +533,8 @@ def AW_Steps(g, usemask, aw_env, nit, maxb, initialiters, mosaic, automaticthres
 image={1}\n\
 niter={2}\n\
 threshold={3}Jy\n\
-UVmax={4}\n".format(g, imagename, initialiters, 6.*bandsthreshs_dict[curr_band], UVmax))
+UVmin={5}\n\
+UVmax={4}\n".format(g, imagename, initialiters, 6.*bandsthreshs_dict[curr_band], UVmax, UVmin))
 		# if not nomask:
 			# local_parset.write("mask={0}\n".format(mask))
 		for i in aw_sets:
@@ -373,7 +546,7 @@ UVmax={4}\n".format(g, imagename, initialiters, 6.*bandsthreshs_dict[curr_band],
 		try:
 			thresh=2.5*(getimgstd("{0}.fits".format(imagename)))
 		except:
-			return
+			return g
 		# print "Cleaning {0} to threshold of {1}...".format(g, thresh)
 		os.remove("{0}.fits".format(imagename))
 	else:
@@ -383,155 +556,88 @@ UVmax={4}\n".format(g, imagename, initialiters, 6.*bandsthreshs_dict[curr_band],
 image={1}\n\
 niter={2}\n\
 threshold={3}Jy\n\
-UVmax={4}\n".format(g, imagename, finish_iters, thresh, UVmax))
+UVmin={5}\n\
+UVmax={4}\n".format(g, imagename, finish_iters, thresh, UVmax, UVmin))
 	if usemask:
 		local_parset.write("mask={0}\n".format(mask))
 	for i in aw_sets:
 		local_parset.write(i)
 	local_parset.close()
-	print "Cleaning {0} to threshold of {1}...".format(g, thresh)
+	print "Cleaning {0} to threshold of {1}...".format(logname, thresh)
 	subprocess.call("awimager {0} > {1}/{2}/logs/awimager_{3}_standalone_final_log.txt 2>&1".format(aw_parset_name, out, obsid, logname), env=aw_env, shell=True)
-	if mosaic:
-		subprocess.call("cp -r {0}.restored.corr {0}_mosaic.restored.corr".format(imagename), shell=True)
-		subprocess.call("cp -r {0}0.avgpb {0}_mosaic0.avgpb".format(imagename), shell=True)
-		if env=="rsm-mainline":
-			if padding > 1.0:
-				#we need to correct the avgpb for mosaicing
-				print "Correcting {0} mosaic padding...".format(imagename)
-				avgpb=pt.table("{0}_mosaic0.avgpb".format(imagename), ack=False, readonly=False)
-				coordstable=avgpb.getkeyword('coords')
-				coordstablecopy=coordstable.copy()
-				value1=coordstablecopy['direction0']['crpix'][0]
-				value2=coordstablecopy['direction0']['crpix'][1]
-				value1*=padding
-				value2*=padding
-				newcrpix=np.array([value1, value2])
-				coordstablecopy['direction0']['crpix']=newcrpix
-				avgpb.putkeyword('coords', coordstablecopy)
-				avgpb.close()
-		subprocess.call("mv {0}*mosaic* {1}".format(imagename, os.path.join(out, obsid, "mosaics")), shell=True)
-	subprocess.call("addImagingInfo {0}.restored.corr '' 0 {1} {2} > {3}/{4}/logs/addImagingInfo_standalone_{4}_log.txt 2>&1".format(imagename, localmaxb, g, out, obsid, logname), shell=True)
-	subprocess.call("image2fits in={0}.restored.corr out={0}.fits > {1}/{2}/logs/image2fits.log 2>&1".format(imagename, out, obsid), shell=True)
-	os.remove(aw_parset_name)
-
-
-def AW_Steps_split(g, interval, niter, aw_env, maxb, userthresh, uvORm, usemask, mosaic, padding, out, env):
-	"""
-	Performs imaging with AWimager using user supplied settings.
-	"""
-	c=299792458.
-	tempgettime=pt.table(g, ack=False)
-	ms_starttime=tempgettime.col("TIME")[0]#datetime.utcfromtimestamp(quantity(str(tempgettime.col("TIME")[0])+'s').to_unix_time())
-	tempgettime.close()
-	name=g.split("/")[-1]
-	obsid=name.split("_")[0]
-	home=os.path.join(out, obsid)
-	temp=pt.table("{0}/OBSERVATION".format(g), ack=False)
-	timerange=float(temp.col("TIME_RANGE")[0][1])-float(temp.col("TIME_RANGE")[0][0])
-	temp.close()
-	temp.done()
-	ft = pt.table(g+'/SPECTRAL_WINDOW', ack=False)
-	freq = ft.getcell('REF_FREQUENCY',0)
-	wave_len=c/freq
-	UVmax=maxb/(wave_len*1000.)
-	ft.close()
-	if uvORm == "M":
-		UVmax=maxb/(wave_len*1000.)
-		localmaxb=maxb
+	if os.path.isdir("{0}.restored.corr".format(imagename)):
+		if mosaic:
+			subprocess.call("cp -r {0}.restored.corr {0}_mosaic.restored.corr".format(imagename), shell=True)
+			subprocess.call("cp -r {0}0.avgpb {0}_mosaic0.avgpb".format(imagename), shell=True)
+			if env=="rsm-mainline":
+				if padding > 1.0:
+					#we need to correct the avgpb for mosaicing
+					print "Correcting {0} mosaic padding...".format(imagename)
+					avgpb=pt.table("{0}_mosaic0.avgpb".format(imagename), ack=False, readonly=False)
+					coordstable=avgpb.getkeyword('coords')
+					coordstablecopy=coordstable.copy()
+					value1=coordstablecopy['direction0']['crpix'][0]
+					value2=coordstablecopy['direction0']['crpix'][1]
+					value1*=padding
+					value2*=padding
+					newcrpix=np.array([value1, value2])
+					coordstablecopy['direction0']['crpix']=newcrpix
+					avgpb.putkeyword('coords', coordstablecopy)
+					avgpb.close()
+			subprocess.call("mv {0}*mosaic* {1}".format(imagename, os.path.join(out, obsid, "mosaics")), shell=True)
+		subprocess.call("addImagingInfo {0}.restored '' {6} {1} {2} > {3}/{4}/logs/addImagingInfo_standalone_{5}_log.txt 2>&1".format(imagename, localmaxb, g, out, obsid, logname, localminb), shell=True)
+		subprocess.call("addImagingInfo {0}.restored.corr '' {6} {1} {2} > {3}/{4}/logs/addImagingInfo_standalone_{5}_log.txt 2>&1".format(imagename, localmaxb, g, out, obsid, logname, localminb), shell=True)
+		subprocess.call("image2fits in={0}.restored out={0}.restored.fits > {1}/{2}/logs/image2fits.log 2>&1".format(imagename, out, obsid), shell=True)
+		subprocess.call("image2fits in={0}.restored.corr out={0}.restored.corr.fits > {1}/{2}/logs/image2fits.log 2>&1".format(imagename, out, obsid), shell=True)
+		#Correct fits - need to add RESTBW and end time
+		#Getting RESTBW
+		# t1=pt.table("{0}.restored.corr".format(imagename), ack=False)
+# 		restbw=t1.getkeywords()['coords']['spectral2']['wcs']['cdelt']
+# 		t1.close()
+# 		t1=pt.table("{0}/OBSERVATION".format(g), ack=False)
+# 		thisendtime=t1.getcell('LOFAR_OBSERVATION_END', 0)
+# 		thisantenna=t1.getcell('LOFAR_ANTENNA_SET', 0)
+# 		t1.close()
+# 		table = pt.table("{0}.restored.corr".format(imagename), ack=False)
+# 		subtables = open_subtables(table)
+# 		ncore, nremote, nintl =  parse_stations(subtables)
+# 		subbandwidth = parse_subbandwidth(subtables)
+# 		subbands = parse_subbands(subtables)
+# 		close_subtables(subtables)
+		restbw, thisendtime, thisantenna, ncore, nremote, nintl, subbandwidth, subbands=getdatainfo(g, imagename)
+		fitstofix=["{0}.restored.corr.fits".format(imagename), "{0}.restored.fits".format(imagename)]
+		for fix in fitstofix:
+			correctfits(fix, restbw, thisendtime, thisantenna, ncore, nremote, nintl, subbandwidth, subbands)
 	else:
-		UVmax=maxb
-		localmaxb=UVmax*(wave_len*1000.)
-	print "Wavelength = {0:00.02f} m / UVmax = {1}".format(wave_len, UVmax)
-	beam=int(g.split("SAP")[1][:3])
-	beamc="SAP00{0}".format(beam)
-	if usemask:
-		mask=os.path.join(out,"masks","{0}_{1}.mask".format(obsid, beamc))
-	num_images=int(timerange/interval)
-	interval_min=interval/60.
-	interval_min_round=round(interval_min, 2)
-	start_time=0.0
-	end_time=interval_min_round
-	for i in range(num_images):
-		try:
-			aw_parset_name="aw_{0}.parset".format(name)
-			time_tag=".timesplit.{0:05.2f}min.window{1:03d}.img".format(interval_min, i+1)
-			imagename=os.path.join(home, name+time_tag)
-			imagename_short=name+time_tag
-			logname=os.path.join(home,"logs",name+time_tag+".txt")
-			thresh=userthresh
-			print "Cleaning {0} Window {1:03d} to threshold of {2}...".format(name, i+1, thresh)
-			local_parset=open(aw_parset_name, 'w')
-			local_parset.write("\nms={0}\n\
-image={1}\n\
-niter={4}\n\
-threshold={5}Jy\n\
-t0={2}\n\
-t1={3}\n\
-UVmax={6}\n".format(g, imagename, start_time, end_time, niter, userthresh, UVmax))
-			if usemask:
-				local_parset.write("mask={0}\n".format(mask))
-			for s in aw_sets:
-				local_parset.write(s)
-			local_parset.close()
-			subprocess.call("awimager {0} > {1} 2>&1".format(aw_parset_name, logname), env=aw_env,  shell=True)
-			if mosaic:
-				subprocess.call("cp -r {0}.restored.corr {0}_mosaic.restored.corr".format(imagename), shell=True)
-				subprocess.call("cp -r {0}0.avgpb {0}_mosaic0.avgpb".format(imagename), shell=True)
-				if env=="rsm-mainline":
-					if padding > 1.0:
-						#we need to correct the avgpb for mosaicing
-						print "Correcting {0} mosaic padding...".format(imagename)
-						avgpb=pt.table("{0}_mosaic0.avgpb".format(imagename), ack=False, readonly=False)
-						coordstable=avgpb.getkeyword('coords')
-						coordstablecopy=coordstable.copy()
-						value1=coordstablecopy['direction0']['crpix'][0]
-						value2=coordstablecopy['direction0']['crpix'][1]
-						value1*=padding
-						value2*=padding
-						newcrpix=np.array([value1, value2])
-						coordstablecopy['direction0']['crpix']=newcrpix
-						avgpb.putkeyword('coords', coordstablecopy)
-						avgpb.close()
-				subprocess.call("mv {0}*mosaic* {1}".format(imagename, os.path.join(out, obsid, "mosaics")), shell=True)
-			subprocess.call("addImagingInfo {0}.restored.corr '' 0 {1} {2} > {3}/{4}/logs/addImagingInfo_standalone_{5}_log.txt 2>&1".format(imagename, localmaxb, g, out, obsid, imagename_short), shell=True)
-			if start_time!=0.0:
-				temp_change_start=pt.table("{0}.restored.corr/LOFAR_ORIGIN/".format(imagename), ack=False, readonly=False)
-				temp_change_start2=pt.table("{0}.restored.corr/LOFAR_OBSERVATION/".format(imagename), ack=False, readonly=False)
-				new_ms_startime=ms_starttime+start_time*60.
-				temp_change_start.putcell('START',0,new_ms_startime)
-				temp_change_start2.putcell('OBSERVATION_START',0,new_ms_startime)
-				temp_change_start.close()
-				temp_change_start2.close()
-				if mosaic:
-					mosaic_time=os.path.join(out, obsid, "mosaics", imagename_short+"_mosaic.restored.corr")
-					tempimg=pt.table(mosaic_time, ack=False, readonly=False)
-					restored_time=tempimg.getkeyword('coords')
-					# print "restored_time: ", restored_time
-					oldtime=restored_time['obsdate']['m0']['value']
-					# print oldtime
-					newtime=oldtime+((i*interval_min_round/(60.*24.)))
-					# print newtime
-					restored_time['obsdate']['m0']['value']=newtime
-					tempimg.putkeyword('coords', restored_time)
-					print "Changed Window {0:03d} Time to {1} (from {2})".format(i+1,datetime.utcfromtimestamp(quantity(str(newtime)+'d').to_unix_time()),datetime.utcfromtimestamp(quantity(str(oldtime)+'d').to_unix_time()))
-					# print restored_time
-					tempimg.close()
-				# temp_inject.write("taustart_ts={0}".format(new_ms_startime.strftime("%Y-%m-%dT%H:%M:%S.0")))
-			injparset="tkp_inject_{0}.parset".format(imagename_short)
-			temp_inject=open(injparset, "w")
-	 		temp_inject.write("tau_time={0}\n".format(interval))
-			temp_inject.close()
-			subprocess.call("trap-inject.py {0} {1}.restored.corr > {2}/{3}/logs/{4}_trapinject_log.txt 2>&1".format(injparset, imagename,out,obsid, imagename_short), shell=True)
-			os.remove(injparset)
-			os.remove(aw_parset_name)
-			# print "image2fits in={0}.restored.corr out={0}.fits > {1}/{2}/logs/image2fits.log 2>&1".format(imagename,out,obsid)
-			subprocess.call("image2fits in={0}.restored.corr out={0}.fits > {1}/{2}/logs/image2fits.log 2>&1".format(imagename,out,obsid), shell=True)
-			start_time+=interval_min_round
-			end_time+=interval_min_round
-		except:
-			start_time+=interval_min_round
-			end_time+=interval_min_round
-			continue
+		print "{0} failed to image.".format(logname)
+		return g
+	os.remove(aw_parset_name)
+	return "Done"
+
+
+usage = "usage: python %prog [options] $MSs/to/image "
+description="A generic mass imaging script for LOFAR data using the AWimager. Takes care of naming, UV ranges, fits, masks, mosaicing and time split imaging.\
+The data used must be in the format of 'L123456_SAP000_BAND01.MS.dppp'. Script originated from rsm_imager.py"
+vers="7.0"
+
+parser = optparse.OptionParser(usage=usage, version="%prog v{0}".format(vers), description=description)
+parser.add_option("--mask", action="store_true", dest="mask", default=False, help="Use option to use a mask when cleaning [default: %default]")
+parser.add_option("-A", "--automaticthresh", action="store_true", dest="automaticthresh", default=False,help="Switch on automatic threshold method of cleaning [default: %default]")
+parser.add_option("-I", "--initialiter", action="store", type="int", dest="initialiter", default=2500,help="Define how many cleaning iterations should be performed in order to estimate the threshold [default: %default]")
+parser.add_option("-b", "--bandthreshs", action="store", type="string", dest="bandthreshs", default="0.053,0.038,0.035,0.028",help="Define the prior level of threshold to clean to for each band enter as '0.34,0.23,..' no spaces, in units of Jy [default: %default]")
+parser.add_option("-u", "--maxbunit", action="store", type="choice", dest="maxbunit", choices=['UV', 'M'], default="UV",help="Choose which method to limit the baselines, enter 'UV' for UVmax (in klambda) or 'M' for physical length (in metres) [default: %default]")
+parser.add_option("-k", "--minbaseline", action="store", type="float", dest="minbaseline", default=0.0,help="Enter the maximum baseline to image out to, making sure it corresponds to the unit options [default: %default]")
+parser.add_option("-l", "--maxbaseline", action="store", type="float", dest="maxbaseline", default=3.0,help="Enter the maximum baseline to image out to, making sure it corresponds to the unit options [default: %default]")
+parser.add_option("-m", "--mosaic", action="store_true", dest="mosaic", default=False, help="Also generate mosaics [default: %default]")
+parser.add_option("-r", "--avgpbradius", action="store", type="float", dest="avgpbr", default=0.5, help="Radius beyond which to zero avgpb values (expressed as fraction of image width) [default: %default]")
+parser.add_option("-N", "--NCPmos", action="store_true", dest="ncp", default=False, help="Use this option if mosaicing the NCP [default: %default]")
+parser.add_option("-n", "--nice", action="store", type="int", dest="nice", default=5, help="Set the niceness level [default: %default]")
+parser.add_option("-o", "--output", action="store", type="string", dest="output", default="images_standalone", help="Specify the name of the images folder that will hold the results. [default: %default]")
+parser.add_option("-p", "--parset", action="store", type="string", dest="parset", default="aw.parset", help="Define parset to use containing AWimager options [default: %default]")
+parser.add_option("-t", "--time", action="store", type="float", dest="time", default=-1.0, help="Select a time interval in which to image the datasets (in secs) [default: %default]")
+parser.add_option("--keepsplitMS", action="store_true", dest="keepsplit", default=False, help="Select to keep the split MS files that are produced. Otherwise these are deleted. [default: %default]")
+parser.add_option("-w", "--overwrite", action="store_true", dest="overwrite", default=False, help="Select whether to overwrite previous results directory [default: %default]")
+(options, args) = parser.parse_args()
 
 correct_lofarroot={'/opt/share/lofar-archive/2013-06-20-19-15/LOFAR_r23543_10c8b37':'rsm-mainline', 
 '/opt/share/lofar/2013-09-30-16-27/LOFAR_r26772_1374418':'lofar-sept2013', 
@@ -549,9 +655,11 @@ intv=options.time
 output=options.output
 mosaic=options.mosaic
 maxb=options.maxbaseline
+minb=options.minbaseline
 inititer=options.initialiter
 avgpbr=options.avgpbr
 ncp=options.ncp
+keepsplit=options.keepsplit
 
 #Check environment
 curr_env=os.environ
@@ -575,7 +683,7 @@ if not toimage_ok:
 	sys.exit()
 
 #setup
-ok, bandsthreshs_dict=setup(output, maxbunit, automaticthresh, bandthreshs, allobsids, mosaic, usemask)
+ok, bandsthreshs_dict=setup(output, automaticthresh, bandthreshs, allobsids, mosaic, usemask)
 if not ok:
 	print "Setup failed, check above message"
 	sys.exit()
@@ -586,7 +694,7 @@ if time_mode=="Error":
 	sys.exit()
 
 #get parset info
-aw_sets, niter, usrthresh, m_size, pad=extract_parset(parset, output, usemask, mosaic, maxb)
+aw_sets, niter, usrthresh, m_size, pad, minb, maxb=extract_parset(parset, output, usemask, mosaic, minb, maxb, maxbunit)
 if aw_sets==False:
 	sys.exit()
 else:
@@ -606,20 +714,45 @@ if usemask:
 
 AW_Steps_multi=partial(AW_Steps,
 usemask=usemask, aw_env=awimager_environ, nit=niter,
-maxb=maxb, initialiters=inititer,
-mosaic=mosaic, automaticthresh=automaticthresh, bandsthreshs_dict=bandsthreshs_dict,
-uvORm=maxbunit, userthresh=usrthresh, padding=pad, out=output, env=env)
+minb=minb, maxb=maxb, initialiters=inititer,
+mosaic=True, automaticthresh=automaticthresh, bandsthreshs_dict=bandsthreshs_dict,
+uvORm=maxbunit, userthresh=usrthresh, padding=pad, out=output, env=env, time_mode=time_mode, interval=intv)
 
-AW_Steps_split_multi=partial(AW_Steps_split, interval=intv, niter=niter,
-aw_env=awimager_environ, maxb=maxb, userthresh=usrthresh,
-uvORm=maxbunit, usemask=usemask, mosaic=mosaic, padding=pad, out=output, env=env)
+# AW_Steps_split_multi=partial(AW_Steps_split, interval=intv, niter=niter,
+# aw_env=awimager_environ, minb=minb, maxb=maxb, userthresh=usrthresh,
+# uvORm=maxbunit, usemask=usemask, mosaic=True, padding=pad, out=output, env=env)
 
+if time_mode:
+	os.mkdir(os.path.join(output, "splitMS"))
+	split_workers=mpl(processes=6)
+	splitdataset_multi=partial(splitdataset, interval=intv, out=output)
+	split_workers.map(splitdataset_multi, toimage)
+	toimage=sorted(glob.glob(os.path.join(output, "splitMS", "*.MS.*")))
+	split_workers.close()
+
+os.mkdir("JAWS_products")
 image_pool=mpl(processes=2)
-if not time_mode:
-	image_pool.map(AW_Steps_multi, toimage)
-else:
-	image_pool.map(AW_Steps_split_multi, toimage)
+# if not time_mode:
+failed=image_pool.map(AW_Steps_multi, toimage)
+
+failed=[j for j in failed if j != "Done"]
+
+if len(failed) > 0:
+	print "Imaging failed images (one at a time)..."
+	failed_pool=mpl(processes=1)
+	failed_pool.map(AW_Steps_multi, failed)
+	failed_pool.close()
+# else:
+	# image_pool.map(AW_Steps_split_multi, toimage)
 
 if mosaic:
 	create_mosaics_multi=partial(create_mosaics, out=output, time_mode=time_mode, avgpbrad=avgpbr, usencp=ncp)
 	image_pool.map(create_mosaics_multi, obsidsbands)
+	
+if time_mode:
+	if not keepsplit:
+		print "Deleting Split MS files..."
+		subprocess.call("rm -rf {0}".format(os.path.join(output, "splitMS")), shell=True)
+
+image_pool.close()
+os.rmdir("JAWS_products")
