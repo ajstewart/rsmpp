@@ -12,6 +12,7 @@ parser = optparse.OptionParser(usage=usage, version="%prog v{0}".format(vers), d
 parser.add_option("-f", "--force", action="store_true", dest="force", default=False, help="Ignore user input and just change the names from those found in the LOFAR table [default: %default]")
 parser.add_option("-g", "--globpattern", action="store", type="string", dest="globpatt", default="*.MS", help="Choose the glob pattern for locating the datafiles in the current directory [default: %default]")
 parser.add_option("--obsids", action="store_true", dest="obsids", default=False, help="Select to change the names of the observation ids to make sequential [default: %default]")
+parser.add_option("--sort", action="store_true", dest="sort", default=False, help="Select to sort measurement sets into observation id named directories [default: %default]")
 (options, args) = parser.parse_args()
 
 def rename1(SB):
@@ -78,9 +79,20 @@ def renameobsids(torename):
 			newtargetobs.append(strname)
 		return newtargetobs
 	
+def sort(obs):
+	dest=obs.split("_")[0]
+	if not os.path.isdir(dest):
+		os.mkdir(dest)
+	newset=os.path.join(dest,obs)
+	if not os.path.isdir(newset):
+		subprocess.call("mv {0} {1}".format(obs, newset), shell=True)
+		print "{0} moved to {1}".format(obs, dest)	
+	else:
+		print "{} already exists! Will not overwrite.".format(newset)
+	
 if __name__=="__main__":
 	if options.obsids:
-		torename=sorted(glob.glob("L*"))
+		torename=sorted(glob.glob(options.globpattern))
 		if len(torename)<1:
 			print "There doesn't seem to be any observation ID directories?".format(options.globpatt)
 			sys.exit()
@@ -88,6 +100,10 @@ if __name__=="__main__":
 			torename_nums=[int(j.split("L")[-1]) for j in torename]
 			renameobsids(torename_nums)
 			print "Renaming finished."
+	elif options.sort:
+		tosort=sorted(glob.glob(options.globpattern))
+		for i in tosort:
+			sort(i)
 	else:
 		torename=sorted(glob.glob(options.globpatt))
 		if len(torename)<1:
