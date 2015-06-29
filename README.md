@@ -1,4 +1,4 @@
-rsmpp-master
+rsmpp
 ============
 
 Radio Sky Monitor Processing Pipeline v2.X
