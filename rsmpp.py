@@ -5,7 +5,7 @@
 #LOFAR RSM data processing script designed for the Southampton lofar machines.
 
 #A full user guide can be found on google docs here:
-# https://docs.google.com/document/d/1aqUxesq4I02i1mKJw_XHjLy0smCbL37uhtBpNf9rs9w
+# https://goo.gl/o2X15b
 
 #Written by Adam Stewart, Last Update June 2015
 
@@ -24,6 +24,19 @@ import emailslofar as em
 vers="2.5.0"	#Current version number
 
 import rsmppfuncs as rsmshared
+
+print "-------------------------------------------------"
+print "  ____  ____  __  __ ____  ____  \n\
+ |  _ \/ ___||  \/  |  _ \|  _ \ \n\
+ | |_) \___ \| |\/| | |_) | |_) |\n\
+ |  _ < ___) | |  | |  __/|  __/ \n\
+ |_| \_\____/|_|  |_|_|   |_|    \n\
+                                 "
+print "v2.5.0"
+print "Written by Adam Stewart"
+print "Last Updated: 2015-06-30"
+print "User Guide: https://goo.gl/o2X15b"
+print "-------------------------------------------------\n"
 
 mainrootpath=os.path.realpath(__file__)
 mainrootpath=mainrootpath.split("/")[:-1]
