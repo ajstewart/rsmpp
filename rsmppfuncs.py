@@ -66,14 +66,21 @@ def deletefile(file):
 	"""Only files not directories"""
 	os.remove(file)
 
-def fetchantenna():
+def fetchantenna(period):
 	log.info("Fetching fixinfo file...")
-	try:
-		subprocess.call("wget http://www.astron.nl/sites/astron.nl/files/cms/fixinfo.tar > /dev/null 2>&1", shell=True)
-		subprocess.call("tar xvf fixinfo.tar > /dev/null 2>&1", shell=True)
-		return True
-	except:
-		return False
+	if period==1:
+		try:
+			subprocess.call("wget http://www.astron.nl/sites/astron.nl/files/cms/fixinfo.tar > /dev/null 2>&1", shell=True)
+			subprocess.call("tar xvf fixinfo.tar > /dev/null 2>&1", shell=True)
+		except:
+			return False
+	elif period==2:
+		try:
+			subprocess.call("wget http://www.astron.nl/sites/astron.nl/files/cms/fixbeaminfo_March2015.tar > /dev/null 2>&1", shell=True)
+			subprocess.call("tar xvf fixbeaminfo_March2015.tar > /dev/null 2>&1", shell=True)
+		except:
+			return False
+	return True
 	
 def correctantenna(ms):
 	log.info("Correcting Antenna Table for {0}...".format(ms.split("/")[-1]))
@@ -156,8 +163,9 @@ def NDPPP_Initial(SB, wk_dir, ndppp_base, prec, precloc):
 	subprocess.call("NDPPP {0} > {1}/logs/ndppp.{2}.log 2>&1".format(ndppp_filename, curr_obs, curr_SB), shell=True)
 	os.remove(ndppp_filename)
 	
-def rficonsole(ms,obsid):
+def rficonsole(ms):
 	log.info("Running rficonsole on {0}...".format(ms))
+	obsid=ms.split("/")[-1].split("_")[0]
 	subprocess.call("rficonsole -j 1 {0} > {1}/logs/rficonsole.{2}.log 2>&1".format(ms, obsid, ms.split("/")[-1]), shell=True)
 
 def check_dataset(ms):

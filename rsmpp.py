@@ -570,6 +570,7 @@ else:
 		lta_workers=Pool(processes=ltacores)
 		#Time range of data which needs the antenna table corrected
 		antenna_range=[4867430400.0, 4898793599.0]
+		antenna_range2=[4928947200.0, 4931625599.0]
 		html_temp=open(html, 'r')
 		initfetch=[htmlline.rstrip('\n') for htmlline in html_temp]
 		html_temp.close()
@@ -647,14 +648,22 @@ else:
 					if tempst >= antenna_range[0] and tempst <= antenna_range[1]:
 						antenna_corrections.append(lta_id)
 						log.warning("{0}\t{1}\tAntenna Tables Correction Required".format(ms_example, datetime.utcfromtimestamp(quantity('{0}s'.format(tempst)).to_unix_time())))
+						periodtocorr=1
+					elif tempst >= antenna_range2[0] and tempst <= antenna_range2[1]:
+						antenna_corrections.append(lta_id)
+						log.warning("{0}\t{1}\tAntenna Tables Correction Required".format(ms_example, datetime.utcfromtimestamp(quantity('{0}s'.format(tempst)).to_unix_time())))
+						periodtocorr=2
 					else:
 						log.info("{0}\t{1}\tAntenna Tables Correction Not Required".format(ms_example, datetime.utcfromtimestamp(quantity('{0}s'.format(tempst)).to_unix_time())))
 			lta_workers.map(rsmshared.organise, ltaoutput3)
 			if len(antenna_corrections) > 0:
 				log.info("Performing Antenna Corrections")
-				gotfixinfo=rsmshared.fetchantenna()
+				gotfixinfo=rsmshared.fetchantenna(periodtocorr)
 				if gotfixinfo:
-					os.chdir("fixinfo")
+					if periodtocorr==1:
+						os.chdir("fixinfo")
+					else:
+						os.chdir("fixbeaminfo")
 					antenna_workers=Pool(processes=n)
 					for a in antenna_corrections:
 						tocorrect=sorted(glob.glob(os.path.join("..",a,"*.dppp")))
@@ -1076,8 +1085,8 @@ Pipeline now stopping...".format(i, data_dir))
 		if rfi:
 			log.info("Starting flagging processes with rficonsole...")
 			# torfi=sorted(glob.glob(os.path.join(i,"*.MS.dppp")))
-			rficonsole_multi=partial(rsmshared.rficonsole, obsid=i)
-			worker_pool.map(rficonsole_multi, tocalibrate)
+			# rficonsole_multi=partial(rsmshared.rficonsole)
+			worker_pool.map(rsmshared.rficonsole, tocalibrate)
 		
 		log.info("Performing phaseonly calibration (and flagging if selected) on all sets...")
 		# calibrate step 2 process
