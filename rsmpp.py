@@ -875,7 +875,7 @@ Pipeline now stopping...".format(i, data_dir))
 			log.warning("Some sub bands appear to be missing - see generated file 'missing_subbands.txt' for details")
 		else:
 			#Just remove the file if none are missing
-			os.remove("missing_subbands.txt")	
+			os.remove("missing_subbands.txt")
 
 		#----------------------------------------------------------------------------------------------------------------------------------------------
 		#																Main Run

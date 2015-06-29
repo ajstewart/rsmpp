@@ -769,13 +769,18 @@ def hba_check_targets(i, beam, targets, targets_corrupt, rsm_bands, rsm_band_num
 		sys.exit()
 	targets_first=int(targets[i][beamselect][0].split('SB')[1][:3])
 	targets_last=int(targets[i][beamselect][-1].split('SB')[1][:3])
+	remainders=(targets_last+1)%subsinbands
+	if remainders!=0:
+		log.debug("Remainder sub bands detected - {} sub bands".format(remainders))
 	target_range=range(0+(beam*diff), diff+(beam*diff))
 	temp=[]
 	toremove=[]
 	for bnd in rsm_band_numbers:
-		thiskey="{0}_{1}_{2}".format(i, beamselect, bnd)
+		thiskey="{0}_{1}_{2:02d}".format(i, beamselect, bnd)
 		rsm_bands[thiskey]=[]
 		ideal_bands[thiskey]=["{0}/{0}_{1}_SB{2:03d}_uv.MS.dppp".format(i, beamselect, h) for h in target_range[bnd*subsinbands:(bnd+1)*subsinbands]]
+		if bnd == rsm_band_numbers[-1] and remainders!=0:
+			ideal_bands[thiskey]+=["{0}/{0}_{1}_SB{2:03d}_uv.MS.dppp".format(i, beamselect, (diff+(beam*diff))+rem) for rem in range(0, remainders)]
 		log.debug("Ideal {0} Band {1}: {2}".format(i, bnd, ideal_bands[thiskey]))
 	for t in targets[i][beamselect]:
 		target_msname=t.split("/")[-1]
@@ -799,10 +804,12 @@ def hba_check_targets(i, beam, targets, targets_corrupt, rsm_bands, rsm_band_num
 				miss=False
 			if miss==False:
 				target_bandno=int(SB_cal/subsinbands)
-				rsm_bands[i+"_"+beamselect+"_{0}".format(target_bandno)].append(i+"/"+t.split("/")[-1])
+				if target_bandno > rsm_band_numbers[-1]:
+					target_bandno-=1
+				rsm_bands[i+"_"+beamselect+"_{0:02d}".format(target_bandno)].append(i+"/"+t.split("/")[-1])
 	for s in target_range:
 		if s not in temp:
-			missingfile.write("Sub band {0} missing from observation {1}\n".format(s, i))
+			missingfile.write("Sub band {0:03d} missing from observation {1}\n".format(s, i))
 			localmiss+=1
 	log.debug("To remove = {0}".format(toremove))
 	for j in toremove:
