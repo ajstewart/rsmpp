@@ -3,9 +3,10 @@ rsmpp
 
 Radio Sky Monitor Processing Pipeline v2.X
 
+Full User Guide: https://goo.gl/o2X15b
+
 ============
 
-Full User Guide: https://goo.gl/o2X15b
 
 Python Version 2.7.3
 
