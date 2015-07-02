@@ -92,7 +92,7 @@ def sort(obs):
 	
 if __name__=="__main__":
 	if options.obsids:
-		torename=sorted(glob.glob(options.globpattern))
+		torename=sorted(glob.glob(options.globpatt))
 		if len(torename)<1:
 			print "There doesn't seem to be any observation ID directories?".format(options.globpatt)
 			sys.exit()
@@ -101,7 +101,7 @@ if __name__=="__main__":
 			renameobsids(torename_nums)
 			print "Renaming finished."
 	elif options.sort:
-		tosort=sorted(glob.glob(options.globpattern))
+		tosort=sorted(glob.glob(options.globpatt))
 		for i in tosort:
 			sort(i)
 	else:
