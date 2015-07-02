@@ -68,6 +68,8 @@ def renameobsids(torename):
 			newname=newnames[name]
 			print "Changing L{0} --> L{1}".format(name, newname)
 			strname="L{0}".format(newname)
+			if not os.path.isdir(strname):
+                                os.mkdir(strname)
 			filestochange=sorted(glob.glob("L{0}/*.dppp".format(name)))
 			for file in filestochange:
 				print file, file.replace(str(name), str(newname))
