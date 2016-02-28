@@ -8,6 +8,15 @@ import numpy as np
 from datetime import datetime
 from pyrap.quanta import quantity
 
+rootpath=os.path.realpath(__file__)
+rootpath=rootpath.split("/")[:-1]
+rootpath="/"+os.path.join(*rootpath)
+
+tools={
+"mosaicavgpb":os.path.join(rootpath, "tools", "mosaic", "avgpbz.py"),
+"mosaic":os.path.join(rootpath, "tools", "mosaic", "mos.py"),
+}
+
 def convert_newawimager(environ):
 	"""
 	Returns an environment that utilises the new version of the AWimager. Used for RSM environment.
@@ -323,16 +332,16 @@ def create_mosaics(tomos, out, time_mode, avgpbrad, usencp):
 			avgpbs=sorted(glob.glob(os.path.join(out, mos_obsid, "mosaics", "*{0}*_{1:04d}.split*.avgpb".format(mos_band, window))))
 			for pb in avgpbs:
 				print "Zeroing corners of avgpb {0}...".format(pb)
-				subprocess.call("python /home/as24v07/scripts/avgpbz.py -r {0} {1}".format(avgpbrad, pb), shell=True)
+				subprocess.call("{0} -r {1} {2}".format(tools["mosaicavgpb"], avgpbrad, pb), shell=True)
 			images_formatted=[j.replace(".restored.corr", "") for j in images]
 			images_cmd=",".join(images_formatted)
 			print "Creating Mosaic for {0} {1} Window {2}...".format(mos_obsid, mos_band, window)
 			mosname=os.path.join(out, mos_obsid, "mosaics", "{0}_{1}_window{2:04d}_mosaic.fits".format(mos_obsid, mos_band, window))
 			sensname=os.path.join(out, mos_obsid, "mosaics", "{0}_{1}_window{2:04d}_mosaic_sens.fits".format(mos_obsid, mos_band, window))
 			if usencp:
-				subprocess.call("python /home/as24v07/scripts/mos.py -N -a avgpbz -o {0} -s {1} {2}".format(mosname, sensname, images_cmd), shell=True)
+				subprocess.call("{0} -N -a avgpbz -o {1} -s {2} {3}".format(tools["mosaic"], mosname, sensname, images_cmd), shell=True)
 			else:
-				subprocess.call("python /home/as24v07/scripts/mos.py -a avgpbz -o {0} -s {1} {2}".format(mosname, sensname, images_cmd), shell=True)
+				subprocess.call("{0} -a avgpbz -o {1} -s {2} {3}".format(tools["mosaic"], mosname, sensname, images_cmd), shell=True)
 			correctedfits=os.path.join(out, mos_obsid, images_formatted[0].split("/")[-1].replace("_mosaic", "")+".restored.corr.fits")
 			bw, endt, ant, ncore, nremote, nintl, subbandwidth, subbands=copyfitsinfo(correctedfits)
 			correctfits(mosname, bw, endt, ant, ncore, nremote, nintl, subbandwidth, subbands)
@@ -341,16 +350,16 @@ def create_mosaics(tomos, out, time_mode, avgpbrad, usencp):
 		avgpbs=sorted(glob.glob(os.path.join(out, mos_obsid, "mosaics", "*{0}*.avgpb".format(mos_band))))
 		for pb in avgpbs:
 			print "Zeroing corners of avgpb {0}...".format(pb)
-			subprocess.call("python /home/as24v07/scripts/avgpbz.py -r {0} {1}".format(avgpbrad, pb), shell=True)
+			subprocess.call("{0} -r {1} {2}".format(tools["mosaicavgpb"], avgpbrad, pb), shell=True)
 		images_formatted=[j.replace(".restored.corr", "") for j in images]
 		images_cmd=",".join(images_formatted)
 		print "Creating Mosaic for {0} {1}...".format(mos_obsid, mos_band)
 		mosname=os.path.join(out, mos_obsid, "mosaics", "{0}_{1}_mosaic.fits".format(mos_obsid, mos_band))
 		sensname=os.path.join(out, mos_obsid, "mosaics", "{0}_{1}_mosaic_sens.fits".format(mos_obsid, mos_band))
 		if usencp:
-			subprocess.call("python /home/as24v07/scripts/mos.py -N -a avgpbz -o {0} -s {1} -a avgpbz {2}".format(mosname, sensname, images_cmd), shell=True)
+			subprocess.call("{0} -N -a avgpbz -o {1} -s {2} -a avgpbz {3}".format(tools["mosaic"], mosname, sensname, images_cmd), shell=True)
 		else:
-			subprocess.call("python /home/as24v07/scripts/mos.py -a avgpbz -o {0} -s {1} -a avgpbz {2}".format(mosname, sensname, images_cmd), shell=True)
+			subprocess.call("{0} -a avgpbz -o {1} -s {2} -a avgpbz {3}".format(tools["mosaic"], mosname, sensname, images_cmd), shell=True)
 		correctedfits=os.path.join(out, mos_obsid, images_formatted[0].split("/")[-1].replace("_mosaic", "")+".restored.corr.fits")
 		bw, endt, ant, ncore, nremote, nintl, subbandwidth, subbands=copyfitsinfo(correctedfits)
 		correctfits(mosname, bw, endt, ant, ncore, nremote, nintl, subbandwidth, subbands)
@@ -618,7 +627,7 @@ UVmax={4}\n".format(g, imagename, finish_iters, thresh, UVmax, UVmin))
 usage = "usage: python %prog [options] $MSs/to/image "
 description="A generic mass imaging script for LOFAR data using the AWimager. Takes care of naming, UV ranges, fits, masks, mosaicing and time split imaging.\
 The data used must be in the format of 'L123456_SAP000_BAND01.MS.dppp'. Script originated from rsm_imager.py"
-vers="7.0"
+vers="7.01"
 
 parser = optparse.OptionParser(usage=usage, version="%prog v{0}".format(vers), description=description)
 parser.add_option("--mask", action="store_true", dest="mask", default=False, help="Use option to use a mask when cleaning [default: %default]")
@@ -730,7 +739,8 @@ if time_mode:
 	toimage=sorted(glob.glob(os.path.join(output, "splitMS", "*.MS.*")))
 	split_workers.close()
 
-os.mkdir("JAWS_products")
+if not os.path.isdir("JAWS_products"):
+    os.mkdir("JAWS_products")
 image_pool=mpl(processes=2)
 # if not time_mode:
 failed=image_pool.map(AW_Steps_multi, toimage)
