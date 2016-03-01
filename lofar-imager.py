@@ -67,17 +67,25 @@ def setup(out, autothresh, bthreshs, oids, mos, msk):
 		return False, bandsthreshs_dict
 	return True, bandsthreshs_dict
 
-def check_time(intvl):
+def check_time(intvl, sonly, winds):
 	if intvl!=-1.0:
 		if intvl<1.0:
 			print "Cannot image in time steps of less than 1s"
 			on="Error"
 		else:
 			print "Time Split Mode: ON"
-			print "Going to image in {0} second time intervals".format(intv)
+			if not sonly:
+				print "Going to image in {0} second time intervals".format(intv)
+				if winds!="all":
+					print "Imaging windows {0} only".format(winds)
+				else:
+					print "Imaging all windows"
+			else:
+				print "Split only mode selected, will split ms into {0} second time intervals".format(intv)
 		on=True
 	else:
 		on=False
+		print "Time Split Mode: OFF"
 	print "----------------------------------------------------------"
 	return on
 	
@@ -627,7 +635,7 @@ UVmax={4}\n".format(g, imagename, finish_iters, thresh, UVmax, UVmin))
 usage = "usage: python %prog [options] $MSs/to/image "
 description="A generic mass imaging script for LOFAR data using the AWimager. Takes care of naming, UV ranges, fits, masks, mosaicing and time split imaging.\
 The data used must be in the format of 'L123456_SAP000_BAND01.MS.dppp'. Script originated from rsm_imager.py"
-vers="7.01"
+vers="7.1"
 
 parser = optparse.OptionParser(usage=usage, version="%prog v{0}".format(vers), description=description)
 parser.add_option("--mask", action="store_true", dest="mask", default=False, help="Use option to use a mask when cleaning [default: %default]")
@@ -644,6 +652,8 @@ parser.add_option("-n", "--nice", action="store", type="int", dest="nice", defau
 parser.add_option("-o", "--output", action="store", type="string", dest="output", default="images_standalone", help="Specify the name of the images folder that will hold the results. [default: %default]")
 parser.add_option("-p", "--parset", action="store", type="string", dest="parset", default="aw.parset", help="Define parset to use containing AWimager options [default: %default]")
 parser.add_option("-t", "--time", action="store", type="float", dest="time", default=-1.0, help="Select a time interval in which to image the datasets (in secs) [default: %default]")
+parser.add_option("-W", "--windows", action="store", type="string", dest="windows", default="all", help="Select specific time windows to image only separated by a comma e.g. in the form '1,6,17,21' [default: %default]")
+parser.add_option("--splitMSonly", action="store_true", dest="splitonly", default=False, help="Select to simply perform the splitting of the chosen MS in time only with no imaging [default: %default]")
 parser.add_option("--keepsplitMS", action="store_true", dest="keepsplit", default=False, help="Select to keep the split MS files that are produced. Otherwise these are deleted. [default: %default]")
 parser.add_option("-w", "--overwrite", action="store_true", dest="overwrite", default=False, help="Select whether to overwrite previous results directory [default: %default]")
 (options, args) = parser.parse_args()
@@ -669,6 +679,8 @@ inititer=options.initialiter
 avgpbr=options.avgpbr
 ncp=options.ncp
 keepsplit=options.keepsplit
+splitonly=options.splitonly
+windows=options.windows
 
 #Check environment
 curr_env=os.environ
@@ -698,7 +710,9 @@ if not ok:
 	sys.exit()
 
 #check time mode
-time_mode=check_time(intv)
+if windows != "all":
+	windows=[int(w) for w in windows.split(",")]
+time_mode=check_time(intv, splitonly, windows)
 if time_mode=="Error":
 	sys.exit()
 
@@ -736,8 +750,16 @@ if time_mode:
 	split_workers=mpl(processes=6)
 	splitdataset_multi=partial(splitdataset, interval=intv, out=output)
 	split_workers.map(splitdataset_multi, toimage)
-	toimage=sorted(glob.glob(os.path.join(output, "splitMS", "*.MS.*")))
 	split_workers.close()
+	if splitonly:
+		print "Split only option selected, now exiting."
+		sys.exit()
+	if windows=="all":
+		toimage=sorted(glob.glob(os.path.join(output, "splitMS", "*.MS.*")))
+	else:
+		toimage=[]
+		for w in windows:
+			toimage+=sorted(glob.glob(os.path.join(output, "splitMS", "*.MS.*sec_{0:04d}.split".format(w))))
 
 if not os.path.isdir("JAWS_products"):
     os.mkdir("JAWS_products")
