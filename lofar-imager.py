@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 
-import glob, subprocess, os, optparse, sys, pyfits, time
+import glob, subprocess, os, optparse, sys, time
 from functools import partial
 from multiprocessing import Pool as mpl
 import pyrap.tables as pt
 import numpy as np
 from datetime import datetime
 from pyrap.quanta import quantity
+from astropy.io import fits
 
 rootpath=os.path.realpath(__file__)
 rootpath=rootpath.split("/")[:-1]
@@ -199,7 +200,7 @@ def check_msformat(mssets):
 	return True, beams, bands, obsids, obsids_beams, obsids_bands
 
 def getimgstd(infile):
-	fln=pyfits.open(infile)
+	fln=fits.open(infile)
 	rawdata=fln[0].data
 	angle=fln[0].header['obsra']
 	bscale=fln[0].header['bscale']
@@ -484,22 +485,22 @@ def correctfits(fits_file, bw, endt, ant, ncore, nremote, nintl, subbandwidth, s
 		endtime=endtime.strftime("%Y-%m-%dT%H:%M:%S.%f")
 	else:
 		endtime=endt
-	fits=pyfits.open(fits_file, mode="update")
-	header=fits[0].header
-	header.update('RESTBW',bw)
-	header.update('END_UTC',endtime)
-	header.update('ANTENNA',ant)
-	header.update('NCORE',ncore)
-	header.update('NREMOTE',nremote)
-	header.update('NINTL',nintl)
-	header.update('SUBBANDS',subbands)
-	header.update('SUBBANDW',subbandwidth)
-	fits.flush()
-	fits.close()
+	thisfits=fits.open(fits_file, mode="update")
+	header=thisfits[0].header
+	header['RESTBW'] = bw
+	header['END_UTC'] = endtime
+	header['ANTENNA'] = ant
+	header['NCORE'] = ncore
+	header['NREMOTE'] = nremote
+	header['NINTL'] = nintl
+	header['SUBBANDS'] = subbands
+	header['SUBBANDW'] = subbandwidth
+	thisfits.flush()
+	thisfits.close()
 	
 def copyfitsinfo(fits_file):
-	fits=pyfits.open(fits_file)
-	header=fits[0].header
+	thisfits=fits.open(fits_file)
+	header=thisfits[0].header
 	bw=header['RESTBW']
 	endt=header['END_UTC']
 	ant=header['ANTENNA']
@@ -508,7 +509,7 @@ def copyfitsinfo(fits_file):
 	nintl=header['NINTL']
 	subbands=header['SUBBANDS']
 	subbandwidth=header['SUBBANDW']
-	fits.close()
+	thisfits.close()
 	return bw, endt, ant, ncore, nremote, nintl, subbandwidth, subbands
 	
 def AW_Steps(g, usemask, aw_env, nit, minb, maxb, initialiters, mosaic, automaticthresh, bandsthreshs_dict, uvORm, userthresh, padding, out, env, time_mode, interval):

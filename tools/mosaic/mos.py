@@ -17,13 +17,14 @@ v0.7	 G. Heald	       Fix RA behavior, add NCP option, pyfits tweak
 v0.8	 G. Heald	       Fix behavior near RA=0
 v0.9   G. Heald        Fix pyfits behavior (updating beam info)
 v0.91  R. Breton       Can read the input image list as a file. Functional NCP flag (hardcoded to 20-degree angular size).
+v0.92  A. Stewart       Replaced pyfits with astropy.io.fits.
 
 TO DO
 =====
 
 """
 
-version = '0.91 2013-11-05'
+version = '0.92 2016-11-15'
 
 import pyrap.tables
 import pyrap.images as pim
@@ -31,7 +32,7 @@ from pyrap import quanta
 import numpy as np
 import argparse
 import pylab as plt
-import pyfits
+from astropy.io import fits
 import os
 import time
 
@@ -216,15 +217,15 @@ def main(args):
     new_pim_sens.tofits(args.sensfits, overwrite=True)
 
     # need to add new beam info (not sure if this is possible with pyrap)
-    hdu = pyfits.open(args.outfits,mode='update')
+    hdu = fits.open(args.outfits,mode='update')
     header = hdu[0].header
-    header.update('BMAJ',mean_psf_fwhm[0])
-    header.update('BMIN',mean_psf_fwhm[1])
-    header.update('BPA',mean_psf_fwhm[2])
-    header.update('BUNIT',pims[-1].info()['unit'])
-    header.update('RESTFRQ',mean_frequency)
-    header.update('RESTFREQ',mean_frequency)
-    newhdu = pyfits.PrimaryHDU(data=hdu[0].data, header=header)
+    header['BMAJ'] = mean_psf_fwhm[0]
+    header['BMIN'] = mean_psf_fwhm[1]
+    header['BPA'] = mean_psf_fwhm[2]
+    header['BUNIT'] = pims[-1].info()['unit']
+    header['RESTFRQ'] = mean_frequency
+    header['RESTFREQ'] = mean_frequency
+    newhdu = fits.PrimaryHDU(data=hdu[0].data, header=header)
     newhdu.writeto(args.outfits,clobber=True)
 
     return

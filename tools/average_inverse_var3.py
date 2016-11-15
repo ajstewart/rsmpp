@@ -7,9 +7,9 @@
 import sys, optparse, os, subprocess
 import numpy as np  
 from pyrap.images import image
-import pyfits as pf
+from astropy.io import fits
 
-vers="3.0"
+vers="3.1"
 usage = "Usage: python %prog [options] <output_name> <fits1> <fits2> [<fits3> ...]"
 description="Improved image averaging script which uses inverse variance weighting. The RMS noise is calculated using a clipping method for each image.\
 Average beam information is also added to the final fits image automatically."
@@ -112,7 +112,7 @@ print "Averaging the following fits files:\n{0}".format(y)
 print "Calculating weights and obtaining beam info..."
 
 for i in range(0,x): 
-	fln=pf.open(y[i]) 
+	fln=fits.open(y[i]) 
 	rawdata=fln[0].data
 	angle=fln[0].header['obsra']
 	bscale=fln[0].header['bscale']
@@ -161,12 +161,12 @@ av_bmin=np.average(bmin)
 av_bpa=np.average(bpa)
 
 print "Average Beam Info - {0:.2f} arcsec x {1:.2f} arcsec (BPA {2:.2f})".format(av_bmaj*3600., av_bmin*3600., av_bpa)
-hdulist = pf.open(fits_name, mode='update')
+hdulist = fits.open(fits_name, mode='update')
 prihdr = hdulist[0].header
-prihdr.update('BMAJ', av_bmaj)
-prihdr.update('BMIN', av_bmin)
-prihdr.update('BPA', av_bpa)
-prihdr.update('BUNIT', "JY/BEAM")
+prihdr['BMAJ'] = av_bmaj
+prihdr['BMIN'] = av_bmin
+prihdr['BPA'] = av_bpa
+prihdr['BUNIT'] = "JY/BEAM"
 hdulist.flush()
 hdulist.close()
 print "Done!"

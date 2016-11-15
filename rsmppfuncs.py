@@ -1,11 +1,12 @@
 #Version 2.5.0
 
-import os, subprocess,time, multiprocessing, glob, pyfits, logging, sys
+import os, subprocess,time, multiprocessing, glob, logging, sys
 import numpy as np
 import pyrap.tables as pt
 from collections import Counter
 from datetime import datetime
 from pyrap.quanta import quantity
+from astropy.io import fits
 
 rootpath=os.path.realpath(__file__)
 rootpath=rootpath.split("/")[:-1]
@@ -617,22 +618,22 @@ def correctfits(fits_file, bw, endt, ant, ncore, nremote, nintl, subbandwidth, s
 		endtime=endtime.strftime("%Y-%m-%dT%H:%M:%S.%f")
 	else:
 		endtime=endt
-	fits=pyfits.open(fits_file, mode="update")
-	header=fits[0].header
-	header.update('RESTBW',bw)
-	header.update('END_UTC',endtime)
-	header.update('ANTENNA',ant)
-	header.update('NCORE',ncore)
-	header.update('NREMOTE',nremote)
-	header.update('NINTL',nintl)
-	header.update('SUBBANDS',subbands)
-	header.update('SUBBANDW',subbandwidth)
-	fits.flush()
-	fits.close()
+	thisfits=fits.open(fits_file, mode="update")
+	header=thisfits[0].header
+	header['RESTBW'] = bw
+	header['END_UTC'] = endtime
+	header['ANTENNA'] = ant
+	header['NCORE'] = ncore
+	header['NREMOTE'] = nremote
+	header['NINTL'] = nintl
+	header['SUBBANDS'] = subbands
+	header['SUBBANDW'] = subbandwidth
+	thisfits.flush()
+	thisfits.close()
 	
 def copyfitsinfo(fits_file):
-	fits=pyfits.open(fits_file)
-	header=fits[0].header
+	thisfits=fits.open(fits_file)
+	header=thisfits[0].header
 	bw=header['RESTBW']
 	endt=header['END_UTC']
 	ant=header['ANTENNA']
@@ -641,7 +642,7 @@ def copyfitsinfo(fits_file):
 	nintl=header['NINTL']
 	subbands=header['SUBBANDS']
 	subbandwidth=header['SUBBANDW']
-	fits.close()
+	thisfits.close()
 	return bw, endt, ant, ncore, nremote, nintl, subbandwidth, subbands
 
 def AW_Steps(g, aw_sets, minb, maxb, aw_env, niter, imagingmode, bandsthreshs_dict, initialiter, uvORm, userthresh, usemask, mos):
@@ -824,7 +825,7 @@ ApplyElement=0".format(int(Nround), int(cellround), int(wmax)))
 	return parsetname, uv_max
 
 def getimgstd(infile):
-	fln=pyfits.open(infile)
+	fln=fits.open(infile)
 	rawdata=fln[0].data
 	angle=fln[0].header['obsra']
 	bscale=fln[0].header['bscale']
