@@ -7,9 +7,9 @@
 #A full user guide can be found on google docs here:
 # https://goo.gl/o2X15b
 
-#Written by Adam Stewart, Last Update June 2015
+#Written by Adam Stewart, Last Update November 2016
 
-#---Version 2.5.0---
+#---Version 2.5.1---
 
 import subprocess, multiprocessing, os, glob, optparse, sys, string, getpass, time, logging, ConfigParser, base64
 from functools import partial
@@ -21,7 +21,7 @@ from itertools import izip
 import numpy as np
 #import stuff for email
 import emailslofar as em
-vers="2.5.0"	#Current version number
+vers="2.5.1"	#Current version number
 
 import rsmppfuncs as rsmshared
 
@@ -32,9 +32,9 @@ print "  ____  ____  __  __ ____  ____  \n\
  |  _ < ___) | |  | |  __/|  __/ \n\
  |_| \_\____/|_|  |_|_|   |_|    \n\
                                  "
-print "v2.5.0"
+print "v2.5.1"
 print "Written by Adam Stewart"
-print "Last Updated: 2015-06-30"
+print "Last Updated: 2016-11-24"
 print "User Guide: https://goo.gl/o2X15b"
 print "-------------------------------------------------\n"
 
@@ -46,12 +46,11 @@ mainrootpath="/"+os.path.join(*mainrootpath)
 curr_env=os.environ
 
 if "LOFARROOT" not in curr_env:
-	print "LOFAR Environment not detected!"
-	print "Make sure it's initialised by running:"
-	print ". /opt/share/lofar/init-lofar.sh (Soton)"
-	print ". /pi1storage/soft/lofar/init-lofar.sh (Oxford)"
-
-if curr_env["LOFARROOT"] in rsmshared.correct_lofarroot:
+	print "Unable to detect LOFAR software version!"
+	print "Oxford installation now system installed."
+	chosen_environ=['oxford']
+elif:
+	curr_env["LOFARROOT"] in rsmshared.correct_lofarroot:
 	chosen_environ=rsmshared.correct_lofarroot[curr_env["LOFARROOT"]]
 else:
 	chosen_environ=curr_env["LOFARROOT"].split("/")[-2]
@@ -133,7 +132,7 @@ group = optparse.OptionGroup(parser, "Processing Options")
 group.add_option("--phase-cal-on", action="store", type="choice", dest="phaseon", choices=["bands", "subbands"], default=config.get("PROCESSING", "phase-cal-on"),help="Select whether to perform phase calibration on the sub bands or concatenated bands. [default: %default]")
 group.add_option("--concat-bands", action="store_true", dest="concatbands", default=config.getboolean("PROCESSING", "concat-bands"),help="Only valid if phase-cal is performed only on sub bands - this defines whether to concatenate the bands after sub band calibration. [default: %default]")
 group.add_option("--cobalt-flag", action="store_true", dest="cobalt", default=config.getboolean("PROCESSING", "cobalt-flag"),help="Flag pre-processed data for underperforming Cobalt stations [default: %default]")
-group.add_option("--rficonsole", action="store_true", dest="rfi", default=config.getboolean("PROCESSING", "rficonsole"),help="Use this option to run rficonsole before phase-only calibration [default: %default]")
+group.add_option("--aoflagger", action="store_true", dest="rfi", default=config.getboolean("PROCESSING", "aoflagger"),help="Use this option to run aoflagger before phase-only calibration [default: %default]")
 group.add_option("-f", "--flag", action="store_true", dest="autoflag", default=config.getboolean("PROCESSING", "autoflag"),help="Use this option to use autoflagging in processing [default: %default]")
 group.add_option("--save-preflag", action="store_true", dest="saveflag", default=config.getboolean("PROCESSING", "save-preflag"),help="Use this option to save the measurement set before the auto station flagging [default: %default]")
 group.add_option("-t", "--postcut", action="store", type="int", dest="postcut", default=config.getint("PROCESSING", "postcut"),help="Use this option to enable post-bbs flagging, specifying the cut level [default: %default]")
@@ -1134,10 +1133,10 @@ Pipeline now stopping...".format(i, data_dir))
 			tocalibrate=sorted(glob.glob("L*/L*_SAP00?_*.MS.dppp.phasecaltmp"))
 		
 		if rfi:
-			log.info("Starting flagging processes with rficonsole...")
+			log.info("Starting flagging processes with aoflagger...")
 			# torfi=sorted(glob.glob(os.path.join(i,"*.MS.dppp")))
 			# rficonsole_multi=partial(rsmshared.rficonsole)
-			worker_pool.map(rsmshared.rficonsole, tocalibrate)
+			worker_pool.map(rsmshared.aoflagger, tocalibrate)
 		
 		log.info("Performing phaseonly calibration (and flagging if selected) on all sets...")
 		# calibrate step 2 process
