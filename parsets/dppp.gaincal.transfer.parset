@@ -1,0 +1,8 @@
+# msin= measurementset.MS ; leave commented out the pipeline will take care of this
+# msout= out.MS ; leave commented out the pipeline will take care of this
+msout.datacolumn = CORRECTED_DATA
+
+steps = [applycal]
+
+applycal.type = applycal
+# applycal.parmdb = calibrator.MS/instrument ; pipeline will take care of this bit

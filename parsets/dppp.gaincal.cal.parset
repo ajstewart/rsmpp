@@ -1,0 +1,15 @@
+# msin= measurementset.MS ; leave commented out the pipeline will take care of this
+msin.baseline=[CR]S*&
+# msout= out.MS ; leave commented out the pipeline will take care of this
+
+steps=[gaincal]
+
+gaincal.type=gaincal
+gaincal.caltype=diagonal
+# gaincal.sourcedb=       #leave blank, pipeline will complete
+# gaincal.parmdb=     # this will be MS/instrument
+gaincal.nchan=0
+gaincal.solint=1
+gaincal.usebeammodel=True
+gaincal.maxiter=50
+# gaincal.tolerance = 1.e-9

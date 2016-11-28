@@ -45,9 +45,17 @@ PHASEONLY=off
 phaseonly_name=phase_only_run
 phaseonly_col=CORRECTED_DATA
 phaseonly_selection=L*BAND??*.dppp ; will find all datasets in directories that match glob entry
+gaincal-apply-beam=True ; Apply the beam after processing using gaincal
+use-bbs=False ; Switch back to using BBS for calibration (much slower!)
 
 [PARSETS]
-ndppp=parsets/ndppp.1.initial.parset
+dpppinitial=parsets/dppp.initial.parset
+dpppgaincal-cal=parsets/dppp.gaincal.cal.parset
+dpppgaincal-transfer=parsets/dppp.gaincal.transfer.parset
+dpppgaincal-phaseonly=parsets/dppp.gaincal.phaseonly.parset
+dpppgaincal-applybeam=parsets/dppp.gaincal.applybeam.parset
+
+[BBSPARSETS]
 calparset=parsets/cal.parset
 corparset=parsets/correct.parset
 phaseparset=parsets/phaseonly.parset

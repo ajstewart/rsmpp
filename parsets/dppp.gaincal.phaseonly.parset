@@ -1,0 +1,18 @@
+# msin= measurementset.MS ; leave commented out the pipeline will take care of this
+# msout= out.MS ; leave commented out the pipeline will take care of this
+msin.baseline=[CR]S*&
+msout.datacolumn=CORRECTED_DATA
+
+steps=[gaincal]
+
+gaincal.type=gaincal
+gaincal.caltype=phaseonly
+# gaincal.sourcedb=L229405_SAP000_SB150_uv.MS.dppp.DPPP.phaseonly/sky
+# gaincal.parmdb=L229405_SAP000_SB150_uv.MS.dppp.DPPP.phaseonly/instrument
+gaincal.nchan=0
+gaincal.solint=2
+gaincal.usebeammodel=True
+gaincal.usechannelfreq=True
+gaincal.beammode=array_factor
+gaincal.maxiter=100
+# gaincal.tolerance = 1.e-9

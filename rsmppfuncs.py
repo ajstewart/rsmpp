@@ -1,4 +1,4 @@
-#Version 2.5.1
+#Version 3.0.0
 
 import os, subprocess,time, multiprocessing, glob, pyfits, logging, sys
 import numpy as np
@@ -287,7 +287,7 @@ steps=[]".format(rsm_bands[a], current_obs, b,'%02d' % band, datacol[phaseon], f
 	subprocess.call("NDPPP {0} > {1}/logs/{2}_BAND{3}.log 2>&1".format(filename,current_obs,b,'%02d' % band), shell=True)
 	os.remove(filename)
 	
-def calibrate_msss2(target, phaseparset, autoflag, saveflag, create_sky, skymodel, phaseon):
+def calibrate_msss2(target, phaseparset, autoflag, saveflag, create_sky, skymodel, phaseon, bbs, gaincal_phase_parset):
 	"""
 	Function for the second half of MSSS style calibration - it performs a phase-only calibration and the auto flagging \
 	if selected.
@@ -299,7 +299,12 @@ def calibrate_msss2(target, phaseparset, autoflag, saveflag, create_sky, skymode
 	if create_sky==True:
 		skymodel="parsets/{0}.skymodel".format(beam)
 	log.info("Performing phase only calibration on {0}...".format(target))
-	subprocess.call("calibrate-stand-alone -f {0} {1} {2} > {3}/logs/calibrate_phase_{4}.txt 2>&1".format(target, phaseparset, skymodel, curr_obs, name), shell=True)
+	if bbs:
+		subprocess.call("calibrate-stand-alone -f {0} {1} {2} > {3}/logs/calibrate_phase_{4}.txt 2>&1".format(target, phaseparset, skymodel, curr_obs, name), shell=True)
+	else:
+		thisparset=make_ndppp_gaincal_phaseonly_parset(gaincal_phase_parset, target, skymodel, curr_obs, create_sky)
+		subprocess.call("NDPPP {0} > {1}/logs/ndppp.gaincal.phaseonly.{2}.log 2>&1".format(thisparset, curr_obs, name), shell=True)
+		os.remove(thisparset)
 	if autoflag:
 		if saveflag:
 			log.info("Saving {0} before autoflag...".format(name))
@@ -1008,7 +1013,57 @@ def hba_check_targets(i, beam, targets, targets_corrupt, rsm_bands, rsm_band_num
 		rsm_bands_lens[k]=len(rsm_bands[k])
 	return localmiss
 
-def hba_calibrate_msss1(Calib, beams, diff, calparset, calmodel, correctparset, dummy, oddeven, firstid, mode):
+def make_ndppp_gaincal_parset(ndppp_settings, calMS, id):
+	parsetname="{0}_ndppp_gaincal.parset".format(id)
+	x=open(parsetname, 'w')
+	x.write("msin={0}\n".format(calMS))
+	x.write("msout=\n")
+	for i in ndppp_settings:
+		g.write(i)
+	x.write("gaincal.sourcedb=parsets/sky.calibrator\n")
+	x.write("gaincal.parmdb={0}/instrument\n".format(calMS))
+	x.close()
+	return parsetname
+	
+def make_ndppp_gaincal_transfer_parset(ndppp_settings, target, cal, id):
+	parsetname="{0}_ndppp_gaincal_transfer.parset".format(id)
+	x=open(parsetname, 'w')
+	x.write("msin={0}\n".format(target))
+	x.write("msout=\n")
+	for i in ndppp_settings:
+		g.write(i)
+	x.write("applycal.parmdb={0}.parmdb\n".format(cal))
+	x.close()
+	return parsetname
+	
+def make_ndppp_gaincal_phaseonly_parset(ndppp_settings, target, skymodel, id, create_sky):
+	parsetname="{0}_ndppp_gaincal_phaseonly.parset".format(id)
+	if create_sky:
+		skymodel=skymodel.replace(".skymodel", ".sky")
+	else:
+		skymodel=skymodel+".sky"
+	x=open(parsetname, 'w')
+	x.write("msin={0}\n".format(target))
+	x.write("msout=\n")
+	for i in ndppp_settings:
+		g.write(i)
+	x.write("gaincal.sourcedb={0}\n".format(skymodel))
+	x.write("gaincal.parmdb={0}/instrument\n".format(target))
+	x.close()
+	return parsetname
+
+def make_ndppp_gaincal_applybeam_parset(ndppp_settings, target, id):
+	parsetname="{0}_ndppp_gaincal_applybeam.parset".format(id)
+	x=open(parsetname, 'w')
+	x.write("msin={0}\n".format(target))
+	x.write("msout=.\n")
+	for i in ndppp_settings:
+		g.write(i)
+	x.close()
+	return parsetname
+
+def hba_calibrate_msss1(Calib, beams, diff, calparset, calmodel, correctparset, dummy, oddeven, firstid, bbs, gaincal_cal_parset,
+gaincal_transfer_parset):
 	"""
 	Function that performs the full calibrator calibration and transfer of solutions for HBA and LBA. Performs \
 	the calibration and then shifts the corrected data over to a new data column.
@@ -1030,7 +1085,13 @@ def hba_calibrate_msss1(Calib, beams, diff, calparset, calmodel, correctparset, 
 	tar_obs="L"+str(tar_number)
 	curr_SB=int(Calib.split("_")[2][-3:])
 	log.info("Calibrating calibrator {0}...".format(calib_name))
-	subprocess.call("calibrate-stand-alone --replace-parmdb --sourcedb sky.calibrator {0} {1} {2} > {3}/logs/calibrate_cal_{4}.txt 2>&1".format(Calib,calparset,calmodel, curr_obs, calib_name), shell=True)
+	if bbs:
+		subprocess.call("calibrate-stand-alone --replace-parmdb --sourcedb sky.calibrator {0} {1} {2} > {3}/logs/calibrate_cal_{4}.txt 2>&1".format(Calib,calparset,calmodel, curr_obs, calib_name), shell=True)
+	else:
+		thisparset=make_ndppp_gaincal_parset(gaincal_cal_parset, Calib,curr_obs)
+		log.info("Performing gaincal calibration on {0}...".format(curr_SB))
+		subprocess.call("NDPPP {0} > {1}/logs/ndppp.gaincal.{2}.log 2>&1".format(thisparset, curr_obs, calib_name), shell=True)
+		os.remove(thisparset)
 	log.info("Zapping suspect points for {0}...".format(calib_name))
 	subprocess.call("{0} --sigma=1 --auto {1}/instrument/ > {2}/logs/edit_parmdb_{3}.txt 2>&1".format(tools["editparmdb"], Calib, curr_obs, calib_name), shell=True)
 	log.info("Making diagnostic plots for {0}...".format(calib_name))
@@ -1045,7 +1106,12 @@ def hba_calibrate_msss1(Calib, beams, diff, calparset, calmodel, correctparset, 
 			target=Calib.replace("SB{0}".format('%03d' % curr_SB), "SB{0}".format('%03d' % target_subband)).replace("SAP000", "SAP00{0}".format(beam)).replace(curr_obs, tar_obs)
 		target_name=target.split('/')[-1]
 		log.info("Transferring calibrator solutions to {0}...".format(target_name))
-		subprocess.call("calibrate-stand-alone --sourcedb sky.dummy --parmdb {0}.parmdb {1} {2} {3} > {4}/logs/calibrate_transfer_{5}.txt 2>&1".format(Calib, target, correctparset, dummy, curr_obs, target_name), shell=True)
+		if bbs:
+			subprocess.call("calibrate-stand-alone --sourcedb sky.dummy --parmdb {0}.parmdb {1} {2} {3} > {4}/logs/calibrate_transfer_{5}.txt 2>&1".format(Calib, target, correctparset, dummy, curr_obs, target_name), shell=True)
+		else:
+			thisparset=make_ndppp_gaincal_transfer_parset(gaincal_transfer_parset, target, Calib, curr_obs)
+			subprocess.call("NDPPP {0} > {1}/logs/ndppp.gaincal.transfer.{2}.log 2>&1".format(thisparset, curr_obs, calib_name), shell=True)
+			os.remove(thisparset)
 		shiftndppp(target, tar_obs, target_name)
 		
 def hba_final_concat(band, beam, target_obs):
@@ -1160,3 +1226,13 @@ def lba_calibrate_msss1(Calib, beams, diff, calparset, calmodel, correctparset, 
 		log.info("Transferring calibrator solutions to {0}...".format(target_name))
 		subprocess.call("calibrate-stand-alone --sourcedb sky.dummy --parmdb {0}/instrument {1} {2} {3} > logs/calibrate_transfer_{4}.txt 2>&1".format(Calib, target, correctparset, dummy, target_name), shell=True)
 		shiftndppp(target, curr_obs, target_name)
+		
+def gaincal_applybeam(target, gaincal_applybeam_parset):
+	temp=target.split('/')
+	name=temp[-1]
+	curr_obs=temp[0]
+	log.info("Applying beam to {0}...".format(name))
+	thisparset=make_ndppp_gaincal_applybeam_parset(gaincal_applybeam_parset, target, curr_obs)
+	subprocess.call("NDPPP {0} > {1}/logs/ndppp.gaincal.applybeam.{2}.log 2>&1".format(thisparset, curr_obs, name), shell=True)
+	os.remove(thisparset)
+	

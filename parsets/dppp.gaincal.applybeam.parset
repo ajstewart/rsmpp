@@ -1,0 +1,6 @@
+# msin= measurementset.MS ; leave commented out the pipeline will take care of this
+msin.datacolumn = CORRECTED_DATA
+# msout= out.MS ; leave commented out the pipeline will take care of this
+msout.datacolumn = CORRECTED_DATA
+
+steps = [applybeam]

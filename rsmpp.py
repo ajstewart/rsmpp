@@ -9,7 +9,7 @@
 
 #Written by Adam Stewart, Last Update November 2016
 
-#---Version 2.5.1---
+#---Version 3.0.0---
 
 import subprocess, multiprocessing, os, glob, optparse, sys, string, getpass, time, logging, ConfigParser, base64
 from functools import partial
@@ -21,7 +21,7 @@ from itertools import izip
 import numpy as np
 #import stuff for email
 import emailslofar as em
-vers="2.5.1"	#Current version number
+vers="3.0.0"	#Current version number
 
 import rsmppfuncs as rsmshared
 
@@ -32,7 +32,7 @@ print "  ____  ____  __  __ ____  ____  \n\
  |  _ < ___) | |  | |  __/|  __/ \n\
  |_| \_\____/|_|  |_|_|   |_|    \n\
                                  "
-print "v2.5.1"
+print "v3.0.0"
 print "Written by Adam Stewart"
 print "Last Updated: 2016-11-24"
 print "User Guide: https://goo.gl/o2X15b"
@@ -140,12 +140,20 @@ group.add_option("-P", "--PHASEONLY", action="store_true", dest="PHASEONLY", def
 group.add_option("--phaseonly_name", action="store", type="string", dest="phase_name", default=config.get("PROCESSING", "phaseonly_name"),help="Specifcy the name of the output directory of the phase only mode [default: %default]")
 group.add_option("--phaseonly_col", action="store", type="choice", dest="phase_col", choices=['DATA', 'CORRECTED_DATA',], default=config.get("PROCESSING", "phaseonly_col"),help="Choose which column to pull the data from ('DATA' or 'CORRECTED_DATA') [default: %default]")
 group.add_option("--phaseonly_selection", action="store", type="string", dest="phase_pattern", default=config.get("PROCESSING", "phaseonly_selection"),help="Specifcy the glob pattern to select the measurement sets to perform the phase-cal on (eg. '??' selects L*/L*BAND??_*.dppp) [default: %default]")
+group.add_option("--gaincal-apply-beam", action="store_true", dest="applybeam", default=config.getboolean("PROCESSING", "gaincal-apply-beam"),help="Apply the beam using gaincal after calibration [default: %default]")
+group.add_option("--use-bbs", action="store_true", dest="bbsmode", default=config.getboolean("PROCESSING", "use-bbs"),help="Switch back to using BBS for all calibration as oppose to gaincal (this will be slower) [default: %default]")
 parser.add_option_group(group)
 group = optparse.OptionGroup(parser, "Parset Options:")
-group.add_option("-k", "--ndppp", action="store", type="string", dest="ndppp", default=config.get("PARSETS", "ndppp"),help="Specify the template initial NDPPP file to use [default: %default]")
-group.add_option("-a", "--calparset", action="store", type="string", dest="calparset", default=config.get("PARSETS", "calparset"),help="Specify bbs parset to use on calibrator calibration [default: %default]")
-group.add_option("-g", "--corparset", action="store", type="string", dest="corparset", default=config.get("PARSETS", "corparset"),help="Specify bbs parset to use on gain transfer to target [default: %default]")
-group.add_option("-z", "--phaseparset", action="store", type="string", dest="phaseparset", default=config.get("PARSETS", "phaseparset"),help="Specify bbs parset to use on phase only calibration of target [default: %default]")
+group.add_option("-k", "--dpppinitial", action="store", type="string", dest="ndppp", default=config.get("PARSETS", "dpppinitial"),help="Specify the template initial DPPP file to use [default: %default]")
+group.add_option("-a","--dpppgaincal-cal", action="store", type="string", dest="dpppcalparset", default=config.get("PARSETS", "dpppgaincal-cal"),help="Specify DPPP gaincal parset to use on calibrator calibration [default: %default]")
+group.add_option("-g","--dpppgaincal-transfer", action="store", type="string", dest="dppptransferparset", default=config.get("PARSETS", "dpppgaincal-transfer"),help="Specify DPPP gaincal parset to use on gain transfer to target from calibrator [default: %default]")
+group.add_option("-z","--dpppgaincal-phaseonly", action="store", type="string", dest="dpppphaseparset", default=config.get("PARSETS", "dpppgaincal-phaseonly"),help="Specify DPPP gaincal parset to use for phase only calibration of target [default: %default]")
+group.add_option("-A","--dpppgaincal-applybeam", action="store", type="string", dest="dpppapplybeamparset", default=config.get("PARSETS", "dpppgaincal-applybeam"),help="Specify DPPP gaincal parset to use when applying the beam before imaging [default: %default]")
+parser.add_option_group(group)
+group = optparse.OptionGroup(parser, "BBS Parset Options:")
+group.add_option("--calparset", action="store", type="string", dest="calparset", default=config.get("BBSPARSETS", "calparset"),help="Specify bbs parset to use on calibrator calibration [default: %default]")
+group.add_option("--corparset", action="store", type="string", dest="corparset", default=config.get("BBSPARSETS", "corparset"),help="Specify bbs parset to use on gain transfer to target [default: %default]")
+group.add_option("--phaseparset", action="store", type="string", dest="phaseparset", default=config.get("BBSPARSETS", "phaseparset"),help="Specify bbs parset to use on phase only calibration of target [default: %default]")
 parser.add_option_group(group)
 group = optparse.OptionGroup(parser, "Skymodel Options:")
 group.add_option("-e", "--calmodel", action="store", type="string", dest="calmodel", default=config.get("SKYMODELS", "calmodel"),help="Specify a calibrator skymodel. By default the calibrator will be \
@@ -153,7 +161,7 @@ detected and the respective model will be automatically fetched [default: %defau
 group.add_option("-s", "--targetmodel", action="store", type="string", dest="skymodel", default=config.get("SKYMODELS", "targetmodel"),help="Specify a particular field skymodel to use for the phase only calibration, by default the skymodels will be\
 automatically generated.[default: %default]")
 group.add_option("-r", "--targetradius", action="store", type="float", dest="skyradius", default=config.getfloat("SKYMODELS", "targetradius"), help="Radius of automatically generated field model [default: %default]")
-group.add_option("-y", "--dummymodel", action="store", type="string", dest="dummymodel", default=config.get("SKYMODELS", "dummymodel"),help="Specify dummy model for use in applying gains [default: %default]")
+group.add_option("-y", "--dummymodel", action="store", type="string", dest="dummymodel", default=config.get("SKYMODELS", "dummymodel"),help="Specify dummy model for use in applying gains (only required when using BBS) [default: %default]")
 parser.add_option_group(group)
 group = optparse.OptionGroup(parser, "Peeling Options:")
 group.add_option("-p", "--peeling", action="store_true", dest="peeling", default=config.getboolean("PEELING", "peeling"),help="Use this option to enable peeling [default: %default]")
@@ -306,6 +314,13 @@ ltameth=options.ltameth #htmlorsrc
 rfi=options.rfi
 ncp=options.ncp
 setstoimage=options.toimage
+bbsmode=options.bbsmode
+#DPPP gaincal parsets
+dppp_cal_parset=options.dpppcalparset #gaincal calibrator parset
+dppp_transfer_parset=options.dppptransferparset #gaincal transfer parset
+dppp_phaseonly_parset=options.dpppphaseparset #gaincal phaseonly parset
+dppp_applybeam_parset=options.dpppapplybeamparset #gaincal apply beam parset
+applybeam=options.applybeam #gaincal apply beam after calibration
 mode="UNKNOWN"
 
 #Now gather the ids that will be run, either from a file or if not a text input.
@@ -431,30 +446,50 @@ if lta:
 			log.critical("Pipeline now stopping...")
 			sys.exit()
 	
+#Check data dir
+log.info("Checking data directory...")
+if not os.path.isdir(data_dir):
+	log.critical("Data Directory \"{0}\" doesn't seem to exist..., please check it has been set correctly.\n\
+Pipeline now stopping...".format(data_dir))
+	sys.exit()
+
 log.info("Checking required parsets...")
 #NDPPP parset
 if not os.path.isfile(ndppp_parset):
 	log.critical("Cannot locate {0}, please check file is present\nPipeline now stopping...".format(ndppp_parset))
 	sys.exit()
-#Check data dir
-if not os.path.isdir(data_dir):
-	log.critical("Data Directory \"{0}\" doesn't seem to exist..., please check it has been set correctly.\n\
-Pipeline now stopping...".format(data_dir))
-	sys.exit()
-#Check the phase only parset
-if not os.path.isfile(phaseparset):
-	log.critical("Cannot locate {0}, please check file is present\nPipeline now stopping...".format(phaseparset))
-	sys.exit()
-#Checks presence of the parset files
-if not os.path.isfile(calparset):
-	log.critical("Cannot locate {0}, please check file is present\nPipeline now stopping...".format(calparset))
-	sys.exit()
-if not os.path.isfile(correctparset):
-	log.critical("Cannot locate {0}, please check file is present\nPipeline now stopping...".format(correctparset))
-	sys.exit()
-if not os.path.isfile(dummy):
-	log.critical("Cannot locate {0}, please check file is present\nPipeline now stopping...".format(dummy))
-	sys.exit()
+
+if bbsmode:
+	#Check the phase only parset
+	if not os.path.isfile(phaseparset):
+		log.critical("Cannot locate {0}, please check file is present\nPipeline now stopping...".format(phaseparset))
+		sys.exit()
+	#Checks presence of the parset files
+	if not os.path.isfile(calparset):
+		log.critical("Cannot locate {0}, please check file is present\nPipeline now stopping...".format(calparset))
+		sys.exit()
+	if not os.path.isfile(correctparset):
+		log.critical("Cannot locate {0}, please check file is present\nPipeline now stopping...".format(correctparset))
+		sys.exit()
+	if not os.path.isfile(dummy):
+		log.critical("Cannot locate {0}, please check file is present\nPipeline now stopping...".format(dummy))
+		sys.exit()
+else:
+	#Check for the DPPP gaincal parsets - which are now used by default.
+	#Check the phase only parset
+	if not os.path.isfile(dppp_phaseonly_parset):
+		log.critical("Cannot locate {0}, please check file is present\nPipeline now stopping...".format(dppp_phaseonly_parset))
+		sys.exit()
+	#Checks presence of the parset files
+	if not os.path.isfile(dppp_cal_parset):
+		log.critical("Cannot locate {0}, please check file is present\nPipeline now stopping...".format(dppp_cal_parset))
+		sys.exit()
+	if not os.path.isfile(dppp_transfer_parset):
+		log.critical("Cannot locate {0}, please check file is present\nPipeline now stopping...".format(dppp_transfer_parset))
+		sys.exit()
+	if not os.path.isfile(dppp_applybeam_parset):
+		log.critical("Cannot locate {0}, please check file is present\nPipeline now stopping...".format(dppp_applybeam_parset))
+		sys.exit()
 
 #----------------------------------------------------------------------------------------------------------------------------------------------
 #																		PHASE ONLY STAGE
@@ -937,6 +972,23 @@ Pipeline now stopping...".format(i, data_dir))
 		n_temp=open(ndppp_parset, 'r')
 		ndppp_base=n_temp.readlines()
 		n_temp.close()
+		if not bbsmode:
+			#Calibrator parset
+			gaincal_cal_parset_temp=open(dppp_cal_parset, 'r')
+			gaincal_cal_parset=gaincal_cal_parset_temp.readlines()
+			gaincal_cal_parset_temp.close()
+			#Phaseonly parset
+			gaincal_phase_parset_temp=open(dppp_phaseonly_parset, 'r')
+			gaincal_phase_parset=gaincal_phase_parset_temp.readlines()
+			gaincal_phase_parset_temp.close()
+			#Transfer parset
+			gaincal_transfer_parset_temp=open(dppp_transfer_parset, 'r')
+			gaincal_transfer_parset=gaincal_transfer_parset_temp.readlines()
+			gaincal_transfer_parset_temp.close()
+			#apply beam parset
+			gaincal_applybeam_parset_temp=open(dppp_applybeam_parset, 'r')
+			gaincal_applybeam_parset=gaincal_applybeam_parset_temp.readlines()
+			gaincal_applybeam_parset_temp.close()
 		# 
 		# Following is the main run -> create models -> Initial NDPPP -> Calibrate -> (Peeling) -> (Post bbs) -> concatenate
 		# 
@@ -964,12 +1016,13 @@ Pipeline now stopping...".format(i, data_dir))
 				subprocess.call("rm -rf sky.calibrator", shell=True)
 			subprocess.call("makesourcedb in={0} out=sky.calibrator format=\'<\' > logs/skysourcedb.log 2>&1".format(calmodel), shell=True)
 
-		log.info("Building dummy sourcedb...")
-		if os.path.isdir('sky.dummy'):
-			subprocess.call("rm -rf sky.dummy", shell=True)
-		subprocess.call("makesourcedb in={0} out=sky.dummy format=\'<\'  > logs/dummysourcedb.log 2>&1".format(dummy), shell=True)
+		if bbsmode:
+			log.info("Building dummy sourcedb...")
+			if os.path.isdir('sky.dummy'):
+				subprocess.call("rm -rf sky.dummy", shell=True)
+			subprocess.call("makesourcedb in={0} out=sky.dummy format=\'<\'  > logs/dummysourcedb.log 2>&1".format(dummy), shell=True)
 
-		#Creates the sky model for each pointing using script that creates sky model from measurement set.
+		#Creates the sky model for each pointing using function that creates sky model from measurement set.
 		if create_sky:
 			log.info("Creating skymodels for each beam...")
 			for b in beams:
@@ -991,6 +1044,8 @@ Pipeline now stopping...".format(i, data_dir))
 				if imaging_set:
 					subprocess.call("makesourcedb in={0} out={1} format=\'<\' > logs/skysourcedb_{2}.log 2>&1".format(b, b.replace(".skymodel", ".sky"), beamc), shell=True)
 			create_sky=True
+		else:
+			subprocess.call("makesourcedb in={0} out={0}.sky format=\'<\' > logs/skysourcedb_{2}.log 2>&1".format(b, b.replace(".skymodel", ".sky"), beamc), shell=True)
 			
 
 		#Now working through the steps starting with NDPPP (see rsmppfuncs.py for functions)
@@ -1096,7 +1151,8 @@ Pipeline now stopping...".format(i, data_dir))
 				if mastermode=="INT":
 					log.info("Calibrating calibrators and transferring solutions for {0} and {1}...".format(i, j))
 					calibrate_msss1_multi=partial(rsmshared.hba_calibrate_msss1, beams=beams, diff=diff, calparset=calparset, 
-					calmodel=calmodel, correctparset=correctparset, dummy=dummy, oddeven=target_oddeven, firstid=firstid_oe, mode=mode)
+					calmodel=calmodel, correctparset=correctparset, dummy=dummy, oddeven=target_oddeven, firstid=firstid_oe, bbs=bbsmode,
+					gaincal_cal_parset=gaincal_cal_parset, gaincal_transfer_parset=gaincal_transfer_parset)
 					if __name__ == '__main__':
 						worker_pool.map(calibrate_msss1_multi, calibs[j])
 				else:
@@ -1141,7 +1197,8 @@ Pipeline now stopping...".format(i, data_dir))
 		log.info("Performing phaseonly calibration (and flagging if selected) on all sets...")
 		# calibrate step 2 process
 		# tocalibrate=sorted(glob.glob("L*/L*_SAP00?_BAND*.MS.dppp.tmp"))
-		calibrate_msss2_multi=partial(rsmshared.calibrate_msss2, phaseparset=phaseparset, autoflag=autoflag, saveflag=saveflag, create_sky=create_sky, skymodel=skymodel, phaseon=phaseon)
+		calibrate_msss2_multi=partial(rsmshared.calibrate_msss2, phaseparset=phaseparset, autoflag=autoflag, saveflag=saveflag, 
+		create_sky=create_sky, skymodel=skymodel, phaseon=phaseon, bbs=bbsmode, gaincal_phase_parset=gaincal_phase_parset)
 		if __name__ == '__main__':
 			worker_pool.map(calibrate_msss2_multi, tocalibrate)
 		proc_target_obs=sorted(glob.glob("L*/L*_SAP00?_BAND*.MS.dppp"))
@@ -1159,6 +1216,14 @@ Pipeline now stopping...".format(i, data_dir))
 			if __name__=='__main__':
 				# pool_peeling=mpl(processes=n)
 				worker_pool.map(peeling_steps_multi, proc_target_obs)
+			log.info("Done!")
+		
+		#apply the beam here just before imaging or any concatenating
+		if not bbsmode and if applybeam:
+			log.info("Applying the beam to measurement sets at the end of calibration")
+			apply_beam_multi=partial(rsmshared.gaincal_applybeam, gaincal_applybeam_parset=gaincal_applybeam_parset)
+			if __name__ == '__main__':
+				worker_pool.map(apply_beam_multi, proc_target_obs)
 			log.info("Done!")
 		
 		if postbbs==True:
