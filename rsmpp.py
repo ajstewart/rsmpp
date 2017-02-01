@@ -48,9 +48,8 @@ curr_env=os.environ
 if "LOFARROOT" not in curr_env:
 	print "Unable to detect LOFAR software version!"
 	print "Oxford installation now system installed."
-	chosen_environ=['oxford']
-elif:
-	curr_env["LOFARROOT"] in rsmshared.correct_lofarroot:
+	chosen_environ='Oxford'
+elif curr_env["LOFARROOT"] in rsmshared.correct_lofarroot:
 	chosen_environ=rsmshared.correct_lofarroot[curr_env["LOFARROOT"]]
 else:
 	chosen_environ=curr_env["LOFARROOT"].split("/")[-2]
@@ -246,10 +245,16 @@ log.addHandler(textlog)
 mastermode=options.mode
 mode_choices={'SIM':'Simultaneous', 'INT':'Interleaved'}
 
+bbsmode=options.bbsmode
+
 log.info("Run started at {0} UTC".format(date_time_start))
 log.info("rsmpp.py Version {0}".format(vers))
 log.info("Running on {0} lofar software".format(chosen_environ))
 log.info("Running in {0} mode".format(mode_choices[mastermode]))
+if bbsmode:
+	log.info("Will use BBS for calibration")
+else:
+	log.info("Will use Gaincal for calibration")
 log.info("User: {0}".format(user))
 if mail:
 	log.info("Email alerts will be sent")
@@ -314,7 +319,6 @@ ltameth=options.ltameth #htmlorsrc
 rfi=options.rfi
 ncp=options.ncp
 setstoimage=options.toimage
-bbsmode=options.bbsmode
 #DPPP gaincal parsets
 dppp_cal_parset=options.dpppcalparset #gaincal calibrator parset
 dppp_transfer_parset=options.dppptransferparset #gaincal transfer parset
@@ -573,7 +577,7 @@ else:
 			log.critical("Directory \"{0}\" already exists and overwrite option not used, run again with '-w' option to overwrite directory or rename/move old results file\n\
 	Pipeline now stopping...".format(newdirname))
 			sys.exit()
-	
+
 	# Makes the new directory and moves to it
 	os.mkdir(newdirname)
 	os.chdir(newdirname)
@@ -1045,7 +1049,7 @@ Pipeline now stopping...".format(i, data_dir))
 					subprocess.call("makesourcedb in={0} out={1} format=\'<\' > logs/skysourcedb_{2}.log 2>&1".format(b, b.replace(".skymodel", ".sky"), beamc), shell=True)
 			create_sky=True
 		else:
-			subprocess.call("makesourcedb in={0} out={0}.sky format=\'<\' > logs/skysourcedb_{2}.log 2>&1".format(b, b.replace(".skymodel", ".sky"), beamc), shell=True)
+			subprocess.call("makesourcedb in={0} out={0}.sky format=\'<\' > logs/skysourcedb_targetskymodel.log 2>&1".format(skymodel), shell=True)
 			
 
 		#Now working through the steps starting with NDPPP (see rsmppfuncs.py for functions)
@@ -1152,13 +1156,14 @@ Pipeline now stopping...".format(i, data_dir))
 					log.info("Calibrating calibrators and transferring solutions for {0} and {1}...".format(i, j))
 					calibrate_msss1_multi=partial(rsmshared.hba_calibrate_msss1, beams=beams, diff=diff, calparset=calparset, 
 					calmodel=calmodel, correctparset=correctparset, dummy=dummy, oddeven=target_oddeven, firstid=firstid_oe, bbs=bbsmode,
-					gaincal_cal_parset=gaincal_cal_parset, gaincal_transfer_parset=gaincal_transfer_parset)
+					gaincal_cal_parset=gaincal_cal_parset, gaincal_transfer_parset=gaincal_transfer_parset, mode=mastermode)
 					if __name__ == '__main__':
 						worker_pool.map(calibrate_msss1_multi, calibs[j])
 				else:
 					log.info("Calibrating calibrators and transfering solutions for {0}...".format(i))
 					calibrate_msss1_multi=partial(rsmshared.lba_calibrate_msss1, beams=beams, diff=diff, calparset=calparset, 
-					calmodel=calmodel, correctparset=correctparset, dummy=dummy, calibbeam=calibbeam, mode=mode)
+					calmodel=calmodel, correctparset=correctparset, dummy=dummy, calibbeam=calibbeam, bbs=bbsmode,
+					gaincal_cal_parset=gaincal_cal_parset, gaincal_transfer_parset=gaincal_transfer_parset, mode=mastermode)
 					if __name__ == '__main__':
 						worker_pool.map(calibrate_msss1_multi, calibs[i])
 			else:
@@ -1219,7 +1224,7 @@ Pipeline now stopping...".format(i, data_dir))
 			log.info("Done!")
 		
 		#apply the beam here just before imaging or any concatenating
-		if not bbsmode and if applybeam:
+		if not bbsmode and applybeam:
 			log.info("Applying the beam to measurement sets at the end of calibration")
 			apply_beam_multi=partial(rsmshared.gaincal_applybeam, gaincal_applybeam_parset=gaincal_applybeam_parset)
 			if __name__ == '__main__':
@@ -1414,5 +1419,5 @@ Pipeline now stopping...".format(i, data_dir))
 		subprocess.call(["cp", os.path.join(root_dir, "rsmpp.log"), "rsmpp_CRASH.log".format(newdirname)])
 		if mail==True:
 			em.send_email(emacc,user_address,"rsmpp Job Error","{0},\n\nYour job {1} crashed with the following error:\n\n{2}\n\nTime of crash: {3}".format(user,newdirname,e, end))
-			em.send_email(emacc,"adam.stewart@astro.ox.ac.uk","rsmpp Job Error","{0}'s job '{1}' just crashed with the following error:\n\n{2}\n\nDirectory: {3}\n\nTime of crash: {4}".format(user,newdirname,e,root_dir,end))
+			em.send_email(emacc,"adam.stewart@physics.ox.ac.uk","rsmpp Job Error","{0}'s job '{1}' just crashed with the following error:\n\n{2}\n\nDirectory: {3}\n\nTime of crash: {4}".format(user,newdirname,e,root_dir,end))
 			
